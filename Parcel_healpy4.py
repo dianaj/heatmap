@@ -39,7 +39,7 @@ class parcel:
     
     def __init__(self, name = 'HotWaterEarth', Teff =6000.0, Rstar = 1.0, Mstar = 1.0, Rplanet = 1.0870, a = 0.1589, 
                  e = 0.0, argp = 0, theta = np.pi/2, 
-                 A = 0, ro = 100.0 , cp = 4200.0, H= 5.0, hh = 14121.0, P = 1.0, Porb = -1, wadv = 1.2, epsilon = 6):
+                 A = 0, ro = 100.0 , cp = 4200.0, H= 5.0, hh = 14121.0, Porb = -1, wadv = 1.2, epsilon = 6):
         self.name = name    # instance variable unique to each instance
 
 
@@ -59,9 +59,9 @@ class parcel:
         if Porb <= 0.0:
             self.Porb = 2*np.pi*(self.a**3/(self.Mstar*parcel.G))**(0.5)
         else:
-            self.Porb =  Porb*parcel.days #orbital period in seconds formula --
+            self.Porb =  Porb* self.days #orbital period in seconds formula --
             
-        self.P =  P* parcel.days #self.Prot() #self.Prot() P* parcel.days#period of rotation planet in seconds 
+        self.P =  self.Prot() #self.Prot() P* parcel.days#period of rotation planet in seconds 
         
         self.ch=self.ro*self.cp*self.H # J/m^2 heat capacity of gas column
         self.wadv = (2*np.pi/self.P)*wadv #think this is a param we need to fit for. In units of how much faster 
@@ -74,7 +74,7 @@ class parcel:
         self.epsilon = epsilon
         self.tau_rad = self.epsilon/self.wadv
         #self.Teq = (((1-A)*F(t)*np.sin(theta)*np.max(cos(phi(t)),0))/sigmaB)**(0.25)
-    
+        
     
     
     def print_stuff(self):
@@ -113,11 +113,13 @@ class parcel:
      
     """ FUNCTIONS FOR DEFINING THE PLANET CONDITIONS, STELLAR FLUX """
        
-    def Prot(self, pmax=2.0, steps =300):
+    def Prot(self):
         k = self.Mstar* parcel.G
         vmax = ((k*(1+self.e))/(self.a*(1-self.e)))**(0.5)
         #print vmax
-        Prot = (2*np.pi*self.Rplanet)/(vmax)
+        #Prot = (2*np.pi*self.Rplanet)/(vmax)
+        
+        Prot = self.Porb*(1-self.e)**(1.5)*(1+self.e)**(-0.5)        
         return Prot
     
     
@@ -125,7 +127,7 @@ class parcel:
     
     def Fstar(self, wavelenght = 8.0):
         wv = wavelenght * 10**(-6) #wavelenght was in micrometers, it's now in meters
-        F = parcel.sigmaB*self.Teff**4*np.pi*self.Rstar**2
+        F = self.sigmaB*self.Teff**4*np.pi*self.Rstar**2
         Fwv = (2*self.h*self.c**2/wv**5)*(1/(np.e**((self.h*self.c)/(wv*self.K*self.Teff))-1))*np.pi*self.Rstar**2 
         return F, Fwv
         
@@ -133,7 +135,7 @@ class parcel:
     def Finc(self, pmax = 2.0, steps = 300.0):
         "flux incident on a point of planet - the substellar point "
         
-        return parcel.sigmaB*self.Teff**4*(self.Rstar/np.array(self.radius(pmax,steps)[1]))**2
+        return self.sigmaB*self.Teff**4*(self.Rstar/np.array(self.radius(pmax,steps)[1]))**2
         
     def Finc_hemi(self, pmax = 2.0, steps = 300.0):
         "total energy (flux) incident on a hemisphere of planet "
@@ -145,6 +147,7 @@ class parcel:
     
     
     """FUNCTIONS FOR DEFINING THE COORDINATE SYSTEM AND MOVEMENT AS A FUNCTION OF TIME """
+    
     def radius(self, pmax=2.0, steps = 300):
         '''Defined for parcel object (should have named it planet).
         Takes : pmax  :: number of rotational periods (float)
@@ -154,7 +157,7 @@ class parcel:
                   r :: orbital separation radius array (as a function of time) '''
         
         
-        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=90., i=90.0, w=90.0)
+        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp)
 
         # Get a time axis
         tmax = self.P*pmax
@@ -174,7 +177,7 @@ class parcel:
                   
         "COULD BE CONBINED WITH RADIUS, IT USES THE SAME STUFF"
         
-        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=90., i=90.0, w=90.0)
+        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp)
         tmax = self.P*pmax
         Nmin = int((pmax)*steps)
         t = np.linspace(0,tmax,num=Nmin)
@@ -197,15 +200,16 @@ class parcel:
                   
         "COULD BE CONBINED WITH RADIUS, IT USES THE SAME STUFF"
         
-        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=90., i=90.0, w=90.0)
+        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp)
         tmax = self.P*pmax
         Nmin = int((pmax)*steps)
         t = np.linspace(0,tmax,num=Nmin)
         pos, TA = ke.xyzPos(t,getTA = True)
-
-        alpha = 180 - np.array(TA)*57.2958 + self.argp
-        #plt.plot(t,alpha)
-        f = 0.5*(1+np.cos(alpha*np.pi/180.0))
+        
+        # i want this to be 0 at transit. f = 90-w at transit so alpha = 90-w - f
+        alpha = (90-self.argp) - np.array(TA)*57.2958
+        
+        f = 0.5*(1-np.cos(alpha*np.pi/180.0))
         #f = pyasl.lambertPhaseFunction(alpha)
         return t, alpha, f
     
@@ -244,13 +248,12 @@ class parcel:
         
         if (d is None):
             days, d = self.DE(pmax, steps, NSIDE)
+    
+            
         
-        else: 
-            days  = days
-            d = d
-        
-        phis = d[:,:,1]
-        thetas = d[:,:,0]
+        dd = d.copy()
+        phis = dd[:,:,1]
+        thetas = dd[:,:,0]
 
         
          
@@ -304,38 +307,74 @@ class parcel:
         "The substellar point is moving in this case"
         #wavelenght was in micrometers
         
-        days, d = self.DE(pmax, steps, NSIDE)
-
-        d[:,:,2][d[:,:,2] == 0] = 0.0001 #replace the zeroes at the beginning so they dont overflow
+        wv = wavelenght*10**(-6)        
         
-        Fwv = ((2*self.h*self.c**2/wavelenght**5)*10**(30)*
-        (1/(np.e**((self.h*self.c*10**6)/(wavelenght*self.K*np.array(d[:,:,2].copy())*self.T0))-1)))
- 
+        days, d = self.DE(pmax, steps, NSIDE)
+        
+        
+
+        d[:,:,2][d[:,:,2] < 0.01] = 0.01 #replace the zeroes at the beginning so they dont overflow
+        
+        #print min(d[:,:,2])
+        #Fwv_ = ((2*self.h*self.c**2/wavelenght**5)*
+        #(1/(np.e**((self.h*self.c*10**6)/(wavelenght*self.K*np.array(d[:,:,2].copy())*self.T0))-1)))
+        
+        #Fwv = Fwv_*10**30
+        
+        a = (2*self.h*self.c**2/wv**5)
+        
+        #print a 
+        b = (self.h*self.c*10**6)/(wavelenght*self.K*self.T0)
+        
+        #print b
+        
+        #Fwv= a* 1/(np.e**(b/np.array(d[:,:,2].copy()))-1)
+        
+        #Fwv = np.zeros(d[:,:,2].shape)
+        #for i in range(len(days)):
+            
+        
+        Fwv = a* 1/(np.expm1(b/np.array(d[:,:,2].copy())))
+            
+            
+        
+            #print min(d[i,:,2])
+        
+        
+        
+        #Fwv_ = (np.log(2*self.h*self.c**2)-np.log(wv**5) + np.log(1) - 
+        #np.log(np.e**((self.h*self.c)/(wv*self.K*np.array(d[:,:,2].copy())*self.T0))-1))
+        
+        #Fwv = np.e**(Fwv_)        
         
         "Get the flux"
         dA = hp.nside2pixarea(NSIDE)*self.Rplanet**2
   
         Fmap_wv = (Fwv.copy()*dA)#/Fwvstar
         
-        crap, Fmap_wvpix = self.shuffle(d, Fmap_wv.copy(), pmax, steps, NSIDE)
+        Ftotal_ = (self.sigmaB * (d[:,:,2]*self.T0)**4)*dA
+        
+        crap, Fmap_wvpix = self.shuffle(d, Fmap_wv, pmax, steps, NSIDE)
 
         
         """IM INTEGRATING TWICE BECAUSE I WANT TO MAKE SURE LEAVING FLUX AND SHUFFLED
         LEAVING FLUX ARE THE SAME. THEY ARE """
         
         Fleavingwv = np.zeros(int(steps * pmax))
-        Fleavingwvpix = np.zeros(int(steps * pmax))
+        Ftotal = np.zeros(int(steps * pmax))
         for i in range(int(steps * pmax)):
             
             Fleavingwv[i] = np.sum(Fmap_wv[i,:])
-            Fleavingwvpix[i] = np.sum(Fmap_wvpix[i,:])
+            Ftotal[i] = np.sum(Ftotal_[i,:])
+            
+        #print Fleavingwv == Fleavingwvpix
 
 
             
         #if TEST :
         #    return days, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Fleavingwvpix     
         #else:
-        return days, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Fleavingwvpix
+        return days, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Ftotal
         
 
         
@@ -350,7 +389,7 @@ class parcel:
         print ("Starting Fobs")
         Nmin = int((pmax)*steps)
         
-        days, d, Fmap_wv, Fmap_wvpix,Fleavingwv, Fleavingwvpix = self.Fleaving(pmax, steps, NSIDE, wavelenght)
+        days, d, Fmap_wv, Fmap_wvpix,Fleavingwv, Ftotal = self.Fleaving(pmax, steps, NSIDE, wavelenght)
         t, weight = self.visibility(pmax, steps, NSIDE, d)
         #t, alpha, f = self.f_ratio(pmax, steps)
         #thetas = d[:,:,0].copy()
@@ -359,10 +398,10 @@ class parcel:
         'used to just use phis = d[:,:,2], same thetas'
 
         #"Fmapobs = Fmap*weight"
-        crap, weightpix = self.shuffle(d.copy(), weight.copy(), pmax, steps, NSIDE)
+        crap, weightpix = self.shuffle(d, weight, pmax, steps, NSIDE)
         
-        #Fmapwvobs = Fmap_wvpix*weight
-        Fmapwvobs = Fmap_wv*weight
+        #Fmapwvobs = Fmap_wv*weight
+        Fmapwvobs = Fmap_wvpix*weightpix
         
 
         
@@ -506,12 +545,14 @@ class parcel:
         "d is going to be a array of the form [time, [NSIDE, [phis, thetas, other quantities]]]"
         
         if (d is None) and (quantity is None):        
-            days, d = self.DE(pmax, steps, NSIDE) 
-            quantity = d[:,:,2].copy()
+            days, d = self.DE(pmax, steps, NSIDE)
+            dd = np.array(d.copy())
+            quantity = np.array(d[:,:,2].copy())
             
         else:
-            d = d.copy()
-            steps = len(d[:,0,0])
+            dd = np.array(d.copy())
+        
+        steps = len(dd[:,0,0])
             #quantity = quantity
         
         #order = (hp.ang2pix(NSIDE, d[:,:,0], d[:,:,1])).astype(int)
@@ -519,7 +560,7 @@ class parcel:
         #quantity = quantity[order]
         order = np.zeros((steps, hp.nside2npix(NSIDE)))
         for i in range(steps):        
-            order[i,:] = (hp.ang2pix(NSIDE, d[i,:,0], d[i,:,1])).astype(int)
+            order[i,:] = (hp.ang2pix(NSIDE, dd[i,:,0], dd[i,:,1])).astype(int)
                     
             quantity[i,:] = quantity[i,order[i,:].astype(int)]
         
