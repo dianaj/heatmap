@@ -106,7 +106,7 @@ inc = 87.0
 inc1 = 70.0
 
 w0 = 90.0
-w1 = 30.0
+w1 = 221.0
 
 
 ke = pyasl.KeplerEllipse(1.3, 2., e=ec, Omega=Om, i=inc, w=w0)
@@ -120,7 +120,7 @@ t = np.linspace(0, 4, 200)
 pos, TA = ke.xyzPos(t,getTA = True)
 
 #print (pos)
-pos1 = ke1.xyzPos(t)
+pos1, TA1 = ke1.xyzPos(t, getTA = True)
 #print("Shape of output array: ", pos.shape)
 
 # x, y, and z coordinates for 50th time point
@@ -203,9 +203,9 @@ ax[2,0].plot(t, 90-np.arctan(pos[::,0]/pos[::,2]))
 
 ax[2,1].set_xlabel('time')
 ax[2,1].set_ylabel('illuminated fraction of planet')
-alpha = 180.0-np.array(TA)*57.2958
-ax[2,1].plot(t, pyasl.lambertPhaseFunction(alpha+345), ls ='None', marker ='o')
-ax[2,1].plot(t, 0.5*(1+np.cos(alpha/57.2958+345/57.2958)),ls ='None', marker ='o')
+alpha = 180.0-np.array(TA1)*57.2958
+ax[2,1].plot(t, pyasl.lambertPhaseFunction(alpha), ls ='None', marker ='o')
+ax[2,1].plot(t, 0.5*(1+np.cos(alpha/57.2958)),ls ='None', marker ='o')
 plt.tight_layout()
 fig.savefig('radius (t)')
 

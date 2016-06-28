@@ -16,13 +16,45 @@ from Parcel_healpy4 import parcel as p
 
 # In[11]:
 
-hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, P = 0.3, wadv = 1, 
-                  epsilon = 3.2*11, argp = 90-121.71, Rstar = 1.5, Mstar = 1.275)
+hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1, 
+                  epsilon = 3.2*11, argp = 121.71, Rstar = 1.5, Mstar = 1.275)
+
+
+days, d = hd.DE(pmax =50)
+d[:,:,2][d[:,:,2] == 0] = 0.01
+wv = 8*10**(-6)
+Fwv_ = (np.log(2*hd.h*hd.c**2)-np.log(wv**5) + np.log(1) - 
+        np.log(np.e**((hd.h*hd.c)/(wv*hd.K*np.array(d[:,:,2].copy())*hd.T0))-1))
+        
+Fwv = np.e**(Fwv_)  
+
+dA = hp.nside2pixarea(8)*hd.Rplanet**2
+  
+Fmap_wv = (Fwv.copy()*dA)
 
 
 # In[12]:
+d, Fmap_wvpix = hd.shuffle(d, Fmap_wv, pmax = 50)
+# In[12]:
+'little argument at periastron test'
 
-days, d, Fmapwvobs, weight, weightpix, Fwv = hd.Fobs(pmax=100, NSIDE=4)
+hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1, 
+                  epsilon = 3.2*11, argp = 121.71, Rstar = 1.5, Mstar = 1.275)
+
+
+
+t, alpha,  f = hd.f_ratio(pmax = 20)
+
+plt.plot(t,f)
+plt.plot(t,alpha*np.pi/180)
+plt.plot(t,TA)
+# In[12]:                
+
+hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 2, 
+                  epsilon = 3.2, argp = 121.71, Rstar = 1.5, Mstar = 1.275)
+                  
+
+days, d, Fmapwvobs, weight, weightpix, Fwv = hd.Fobs(pmax=20, steps = 1000, NSIDE=4)
 
 
 # In[5]:
@@ -31,7 +63,7 @@ days, d, Fmapwvobs, weight, weightpix, Fwv = hd.Fobs(pmax=100, NSIDE=4)
 #d, weightpix =hd.shuffle(d, weight, pmax= 100, NSIDE = 4)
 
 # In[5]:
-days, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Fleavingwvpix  = hd.Fleaving(pmax = 100, NSIDE = 4)
+days, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Fleavingwvpix  = hd.Fleaving(pmax = 20, steps = 1000,  NSIDE = 4)
  
  
 # In[5]:
@@ -41,10 +73,15 @@ Fstar, Fstarwv = hd.Fstar()
 
 #
 
-plt.plot( Fwv/Fstarwv)
-plt.plot( Fleavingwv/Fstarwv)
-plt.plot( Fleavingwvpix/Fstarwv)
-#fig.savefig()
+plt.plot( days* hd.days, Fwv/Fstarwv, label = "Observed Flux")
+plt.plot( days* hd.days, Fleavingwv/Fstarwv, label = 'Emitted flux')
+plt.plot( days* hd.days, Fleavingwvpix/Fstarwv)
+plt.xlabel('F_planet/ F_star')
+plt.ylabel('Time (s)')
+plt.legend()
+plt.title("tau_rad = "+"%.1f"%(hd.tau_rad/ hd.days * 24)+ " hours, wadv = "+"%.1f"%(hd.wadv/(2*np.pi/hd.P))+ " x wrot" )
+fig.savefig("Flux_tau_rad = "
+            +"%.1f"%(hd.tau_rad/ hd.days * 24)+ " hours, wadv = "+"%.1f"%(hd.wadv/(2*np.pi/hd.P))+ " x wrot.pdf")
 
 
 # In[6]:
@@ -55,7 +92,7 @@ crap, weightpix = hd.shuffle(d, weight.copy(), pmax = 100, NSIDE = 4)
 
 # In[7]:
 
-d,Fweight= hd.illum(pmax = 100, NSIDE =4)
+d,Fweight= hd.illum(pmax = 20, steps = 1000, NSIDE =4)
 
 d, Fweightpix = hd.shuffle(d, Fweight.copy(), pmax = 100, NSIDE = 4)
 
@@ -63,12 +100,12 @@ d, Fweightpix = hd.shuffle(d, Fweight.copy(), pmax = 100, NSIDE = 4)
 
 window = np.zeros(weight.shape)
 
-MAX = 10*10**(22)
+MAX = 2*10**(23)
 MIN = 10*10**(14)
 
 fig= plt.figure(figsize = (10,16))
-tstart = 22000
-window[tstart,np.where((np.array(weight[tstart,:]) > 0.0 ) & (np.array(Fweight[tstart,:])> 0.0))] = 1
+tstart = 15000
+window[tstart,np.where((np.array(weightpix[tstart,:]) > 0.0 ) & (np.array(Fweightpix[tstart,:])> 0.0))] = 1
     
 hp.visufunc.mollview(Fmap_wvpix[tstart,:], title = "Flux t="+str(tstart), xsize = 600, 
                          sub = (8,5,1),hold = False, min = MAX/4.0, max = MAX*3)#, unit = 'Flux')
@@ -76,19 +113,19 @@ hp.visufunc.mollview(Fmap_wvpix[tstart,:], title = "Flux t="+str(tstart), xsize 
 hp.visufunc.mollview(Fmapwvobs[tstart,:], title = "Flux-obs t="+str(tstart), xsize = 600, 
                          sub = (8,5,2),hold = False, min = MAX/4.0, max = MAX*3)#, unit = 'Flux')
     
-hp.mollview(weight[tstart,:],title = "Visibility t="+str(tstart),min = 0, max=1,
+hp.mollview(weightpix[tstart,:],title = "Visibility t="+str(tstart),min = 0, max=1,
                 sub = (8,5,3))#, unit = 'Window ')  
                 
-hp.visufunc.mollview(Fweight[tstart,:], title = "Illum t="+str(tstart), xsize = 600, 
+hp.visufunc.mollview(Fweightpix[tstart,:], title = "Illum t="+str(tstart), xsize = 600, 
                          sub = (8,5,4),hold = False, min = 0, max = 1)#, unit = 'Window')
                          
 hp.visufunc.mollview(window[tstart, :], title = "Intersection t="+str(tstart), xsize = 600, 
                          sub = (8,5,5),hold = False, min = 0, max = 1.5)
 for i in range(1,8):
     
-    time = 22000+i*200
+    time = 15000+i*20
     
-    window[time,np.where((np.array(weight[time,:]) > 0.0 ) & (np.array(Fweight[time,:])> 0.0))] = 1
+    window[time,np.where((np.array(weightpix[time,:]) > 0.0 ) & (np.array(Fweightpix[time,:])> 0.0))] = 1
     
     hp.visufunc.mollview(Fmap_wvpix[time,:], title = "t="+str(time), xsize = 600, 
                          sub = (8,5,int(5*i+1)),hold = False, min = MAX/4.0, max = MAX*3)#, unit = 'Flux')
@@ -96,10 +133,10 @@ for i in range(1,8):
     hp.visufunc.mollview(Fmapwvobs[time,:], title = "t="+str(time), xsize = 600, 
                          sub = (8,5,int(5*i+2)),hold = False, min = MAX/4.0, max = MAX*3)#, unit = 'Flux')
     
-    hp.mollview(weight[time,:],title = "t="+str(time),min = 0, max=1,
+    hp.mollview(weightpix[time,:],title = "t="+str(time),min = 0, max=1,
                 sub = (8,5,int(5*i+3)))#, unit = 'Window ')  
                 
-    hp.visufunc.mollview(Fweight[time,:], title = "t="+str(time), xsize = 600, 
+    hp.visufunc.mollview(Fweightpix[time,:], title = "t="+str(time), xsize = 600, 
                          sub = (8,5,int(5*i+4)),hold = False, min = 0, max = 1)#, unit = 'Window')
                          
     hp.visufunc.mollview(window[time, :], title = "t="+str(time), xsize = 600, 
