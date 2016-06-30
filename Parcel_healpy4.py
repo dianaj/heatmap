@@ -39,7 +39,7 @@ class parcel:
     
     def __init__(self, name = 'HotWaterEarth', Teff =6000.0, Rstar = 1.0, Mstar = 1.0, Rplanet = 1.0870, a = 0.1589, 
                  e = 0.0, argp = 0, theta = np.pi/2, 
-                 A = 0, ro = 100.0 , cp = 4200.0, H= 5.0, hh = 14121.0, Porb = -1, wadv = 1.2, epsilon = 6):
+                 A = 0, ro = 100.0 , cp = 4200.0, H= 5.0, hh = 14121.0, P = 1.0, Porb = -1, wadv = 1.2, epsilon = 6):
         self.name = name    # instance variable unique to each instance
 
 
@@ -59,9 +59,9 @@ class parcel:
         if Porb <= 0.0:
             self.Porb = 2*np.pi*(self.a**3/(self.Mstar*parcel.G))**(0.5)
         else:
-            self.Porb =  Porb* self.days #orbital period in seconds formula --
+            self.Porb =  Porb*parcel.days #orbital period in seconds formula --
             
-        self.P =  self.Prot() #self.Prot() P* parcel.days#period of rotation planet in seconds 
+        self.P =  P* parcel.days #self.Prot() #self.Prot() P* parcel.days#period of rotation planet in seconds 
         
         self.ch=self.ro*self.cp*self.H # J/m^2 heat capacity of gas column
         self.wadv = (2*np.pi/self.P)*wadv #think this is a param we need to fit for. In units of how much faster 
@@ -74,7 +74,7 @@ class parcel:
         self.epsilon = epsilon
         self.tau_rad = self.epsilon/self.wadv
         #self.Teq = (((1-A)*F(t)*np.sin(theta)*np.max(cos(phi(t)),0))/sigmaB)**(0.25)
-        
+    
     
     
     def print_stuff(self):
@@ -109,55 +109,12 @@ class parcel:
                                 self.ch, self.wadv/(2*np.pi/self.P), 
                                 self.T0, self.tau_rad, 
                                 self.epsilon ))
-                                
-     
-    """ FUNCTIONS FOR DEFINING THE PLANET CONDITIONS, STELLAR FLUX """
-       
-    def Prot(self):
-        k = self.Mstar* parcel.G
-        vmax = ((k*(1+self.e))/(self.a*(1-self.e)))**(0.5)
-        #print vmax
-        #Prot = (2*np.pi*self.Rplanet)/(vmax)
-        
-        Prot = self.Porb*(1-self.e)**(1.5)*(1+self.e)**(-0.5)        
-        return Prot
-    
-    
-
-    
-    def Fstar(self, wavelenght = 8.0):
-        wv = wavelenght * 10**(-6) #wavelenght was in micrometers, it's now in meters
-        F = self.sigmaB*self.Teff**4*np.pi*self.Rstar**2
-        Fwv = (2*self.h*self.c**2/wv**5)*(1/(np.e**((self.h*self.c)/(wv*self.K*self.Teff))-1))*np.pi*self.Rstar**2 
-        return F, Fwv
-        
-        
-    def Finc(self, pmax = 2.0, steps = 300.0):
-        "flux incident on a point of planet - the substellar point "
-        
-        return self.sigmaB*self.Teff**4*(self.Rstar/np.array(self.radius(pmax,steps)[1]))**2
-        
-    def Finc_hemi(self, pmax = 2.0, steps = 300.0):
-        "total energy (flux) incident on a hemisphere of planet "
-        "depends on temperature of star!!!"
-        # Einc = Finc* integral(phi: 0->2pi, theta: 0->pi/2) rp^2*cos(theta)sin(theta) dtheta dphi
-        # ---- integral overplanet coordinates
-        return self.Finc(pmax, steps)*np.pi*self.Rplanet**2
             
     
-    
-    """FUNCTIONS FOR DEFINING THE COORDINATE SYSTEM AND MOVEMENT AS A FUNCTION OF TIME """
-    
     def radius(self, pmax=2.0, steps = 300):
-        '''Defined for parcel object (should have named it planet).
-        Takes : pmax  :: number of rotational periods (float)
-                steps :: number of steps per period (int)
-        
-        Returns : t :: a time array in seconds 
-                  r :: orbital separation radius array (as a function of time) '''
         
         
-        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp)
+        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=90., i=90.0, w=90.0)
 
         # Get a time axis
         tmax = self.P*pmax
@@ -168,16 +125,8 @@ class parcel:
         return t, radius
     
     def ang_vel(self, pmax = 2.0, steps = 300):
-        '''Defined for parcel object (should have named it planet).
-        Takes : pmax  :: number of rotational periods (float)
-                steps :: number of steps per period (int)
         
-        Returns : t :: a time array in seconds 
-                  ang_vel :: angular velocity at each step in the orbit (as a function of time) '''
-                  
-        "COULD BE CONBINED WITH RADIUS, IT USES THE SAME STUFF"
-        
-        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp)
+        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=90., i=90.0, w=90.0)
         tmax = self.P*pmax
         Nmin = int((pmax)*steps)
         t = np.linspace(0,tmax,num=Nmin)
@@ -187,34 +136,8 @@ class parcel:
         #print max(ang_vel)*self.a*(1-self.e)
         
         return t, ang_vel
-        
-    
-    def f_ratio(self, pmax = 2.0, steps = 300):
-        '''Defined for parcel object (should have named it planet).
-        Takes : pmax  :: number of rotational periods (float)
-                steps :: number of steps per period (int)
-        
-        Returns : t     :: a time array in seconds 
-                  alpha :: the phase angle in degrees -- 180 - True Anomaly + argument at periastron = 90 - argp ??
-                  f     :: illuminated fraction of planet -- 1/2(1+cos(alpha))'''
-                  
-        "COULD BE CONBINED WITH RADIUS, IT USES THE SAME STUFF"
-        
-        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp)
-        tmax = self.P*pmax
-        Nmin = int((pmax)*steps)
-        t = np.linspace(0,tmax,num=Nmin)
-        pos, TA = ke.xyzPos(t,getTA = True)
-        
-        # i want this to be 0 at transit. f = 90-w at transit so alpha = 90-w - f
-        alpha = (90-self.argp) - np.array(TA)*57.2958
-        
-        f = 0.5*(1-np.cos(alpha*np.pi/180.0))
-        #f = pyasl.lambertPhaseFunction(alpha)
-        return t, alpha, f
     
     def SSP(self, pmax =2, steps =300):
-        
         t, ang_vel = self.ang_vel(pmax, steps)
         t, alpha, f = self.f_ratio(pmax, steps)
         'z0= orbital position at t = 0'
@@ -229,154 +152,216 @@ class parcel:
         
         SSP =(zt-((self.wadv)*t -((self.wadv*t)/(2*np.pi)).astype(int)*2*np.pi)-
         (t/self.Porb).astype(int)*2*np.pi)
-        
         SOP = (((-alpha[0]+180)*np.pi/180)-
                 ((self.wadv)*t -((self.wadv*t)/(2*np.pi)).astype(int)*2*np.pi))
         #SOP = SSP + ((-alpha+180)*np.pi/180)
         return t, zt, SSP, SOP
     
-
-    """ILLUMINATION AND VISIBILITY """    
-    
-    def illum(self, pmax =2, steps =300, NSIDE = 8, d = None) :  
-        "illumination goes around twice as fast as everything else. why???"
-        
-        ''' USES THE DE TO CALCULATE THE ILLUMINATION WEIGHT. 
-            ONLY USED FOR CHECKING
-            THE ILLUMINATION WEIGHT IS ALSO USED IN THE DE TO FIGURE OUT THE FLUX AT EACH POSITION ON THE PLANET 
-            AT A MOMENT IN TIME. BUT THEY DONT SEEM TO DO THE SAME THING.'''
-        
-        if (d is None):
-            days, d = self.DE(pmax, steps, NSIDE)
-    
-            
-        
-        dd = d.copy()
-        phis = dd[:,:,1]
-        thetas = dd[:,:,0]
-
-        
-         
-        Fweight = ((np.cos(phis)+ np.abs(np.cos(phis)))/2.0 * np.sin(thetas))
-                  
-
-        return d, Fweight
-
+ 
+           
+    def Prot(self, pmax=2.0, steps =300):
+        k = self.Mstar* parcel.G
+        vmax = ((k*(1+self.e))/(self.a*(1-self.e)))**(0.5)
+        #print vmax
+        Prot = (2*np.pi*self.Rplanet)/(vmax)
+        return Prot
     
     
+    def f_ratio(self, pmax = 2.0, steps = 300):
+        'returns the illuminated fraction of the planet'
+        ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=90., i=90.0, w=90.0)
+        tmax = self.P*pmax
+        Nmin = int((pmax)*steps)
+        t = np.linspace(0,tmax,num=Nmin)
+        pos, TA = ke.xyzPos(t,getTA = True)
+
+        alpha = 180 - np.array(TA)*57.2958 + self.argp
+        #plt.plot(t,alpha)
+        f = pyasl.lambertPhaseFunction(alpha)
+        return t, alpha, f
+    
+    def Fstar(self, wavelenght = 8.0):
+        wv = wavelenght * 10**(-6) #wavelenght was in micrometers, it's now in meters
+        F = parcel.sigmaB*self.Teff**4*np.pi*self.Rstar**2
+        Fwv = (2*self.h*self.c**2/wv**5)*(1/(np.e**((self.h*self.c)/(wv*self.K*self.Teff))-1))*np.pi*self.Rstar**2 
+        return F, Fwv
         
-    def visibility(self, pmax =2, steps =300, NSIDE = 8, d = None, TEST = False):
         
-        if d is None:
+    def Finc(self, pmax = 2.0, steps = 300.0):
+        "flux incident on a point of planet - the substellar point "
+        
+        return parcel.sigmaB*self.Teff**4*(self.Rstar/np.array(self.radius(pmax,steps)[1]))**2
+        
+    
+    def illum(self, pmax =2, steps =300, NSIDE = 8, days = None, d = None, TEST = False) :  
+        
+        if days == None and d == None:
             days, d = self.DE(pmax, steps, NSIDE)
         
         else: 
+            days  = days
+            d = d
+        
+        t, zt, SSP, SOP = self.SSP(pmax, steps)
+        
+
+                
+        phis = d[:,:,2]
+        thetas = d[:,:,1]
+        'i think these are phis now'
+        coordsSSP = (phis)
+        
+        
+        
+        """!!!!!!"""
+        
+        """OH shit! coords SSP are already sorted!!!"""          
+        Fweight = ((np.cos(coordsSSP)+
+                   np.abs(np.cos(coordsSSP)))/2.0 * np.sin(thetas))
+                   
+                    
+        F = (self.Finc(pmax, steps).reshape(-1,1)* Fweight)
+             
+        Fnorm = F/(parcel.sigmaB*self.Teff**4*(self.Rstar/(self.a*(1-self.e)))**2)
+        
+        Fweightpix = np.empty(Fweight.shape)
+        #contours of equal illumination theta
+        
+        c_thetas1 = []
+        c_phis1 = []
+        for i in range(int(pmax*steps)):
+            c_t = thetas[i,np.where(np.abs(Fweight[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            c_p = coordsSSP[i,np.where(np.abs(Fweight[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            c_thetas1.append(c_t)
+            c_phis1.append(c_p)
+        
+        c_thetas7 = []
+        c_phis7 = []
+        for i in range(int(pmax*steps)):
+            c_t = thetas[i,np.where(np.abs(Fweight[i,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            c_p = coordsSSP[i,np.where(np.abs(Fweight[i,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            'should we put these angles in substellat point coordinates or what? '
+            c_thetas7.append(c_t)
+            c_phis7.append(c_p)
+            Fweightpix[i,:]= Fweight[i,hp.ang2pix(NSIDE, thetas[i,:],coordsSSP[i,:])] #phis[i,:])]
+        
+        if TEST == True:
+            return t, zt, SSP, SOP, thetas, phis, c_thetas1, c_phis1, c_thetas7, c_phis7,F, Fnorm, Fweight, Fweightpix
+        
+        if TEST == False:
+            return Fweight, Fweightpix
             
+        else:
+            print "Do you want the contours or not? If yes, set TEST = True. Else, set TEST = False"
+            
+    def visibility(self, pmax =2, steps =300, NSIDE = 8, days = None, d = None, TEST = False):
+        
+        if days == None and d == None:
+            days, d = self.DE(pmax, steps, NSIDE)
+        
+        else: 
+            days  = days
             d = d
                 
-        #t, zt, SSP, SOP = self.SSP(pmax, steps)
-        t, alpha, f = self.f_ratio(pmax, steps)
-        
-        phis = d[:,:,1]#-(angles.reshape(-1,1)) # location of gas parcel on planet relative to where it started
-        thetas = d[:,:,0]
+        t, zt, SSP, SOP = self.SSP(pmax, steps)
+        phis = d[:,:,2]#-(angles.reshape(-1,1)) # location of gas parcel on planet relative to where it started
+        thetas = d[:,:,1]
         'i think these are phis now'
-        #coordsSSP = (phis) #-
+        coordsSSP = (phis) #-
         
-        #2#coordsSOP = phis+(zt%(2*np.pi)).reshape(-1,1)
-        coordsSOP = phis-(-alpha.reshape(-1,1)+180)*np.pi/180
-        #coordsSOP = phis+(zt).reshape(-1,1)+(-alpha[0]+180)*np.pi/180
+        #coordsSOP = phis+(zt%(2*np.pi)).reshape(-1,1)
+        
+        coordsSOP = phis+(zt).reshape(-1,1)
         #coordsSOP = phis - (SOP - SSP).reshape(-1,1)    
         """coords SOP are already sorted too!!!"""
-        weight = ((np.cos(coordsSOP)+np.abs(np.cos(coordsSOP)))/2.0)*np.sin(thetas)
+        weight = ((np.cos(coordsSOP)+np.abs(np.cos(coordsSOP)))/2)*np.sin(thetas)
                 
+        weightpix = np.empty(weight.shape)
+        #contours of equal illumination theta
         
+        c_thetas1 = []
+        c_phis1 = []
+        for i in range(int(pmax*steps)):
+            c_t = thetas[i,np.where(np.abs(weightpix[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            c_p = coordsSSP[i,np.where(np.abs(weightpix[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            c_thetas1.append(c_t)
+            c_phis1.append(c_p)
+        
+        c_thetas7 = []
+        c_phis7 = []
+        
+        for j in range(int(pmax*steps)):
+            c_t = thetas[j,np.where(np.abs(weightpix[j,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            c_p = coordsSSP[j,np.where(np.abs(weightpix[j,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
+            'should we put these angles in substellar point coordinates or what? '
+            c_thetas7.append(c_t)
+            c_phis7.append(c_p)
+            weightpix[j]= weight[j,hp.ang2pix(NSIDE, thetas[j,:], coordsSSP[j,:])] #phis[j,:])]
 
-           
-
-        if TEST :
-            return t, d, thetas, phis, coordsSOP, weight
+        if TEST == True:
+            return t, thetas, phis, c_thetas1, c_phis1, c_thetas7, c_phis7, coordsSSP, coordsSOP, weight, weightpix
+        
+        if TEST == False:
+            return t, zt, coordsSSP, coordsSOP, weight, weightpix
+            
         else:
-            return t, weight
-
+            print "Do you want the contours or not? If yes, set TEST = True. Else, set TEST = False"
         
         
         
-
+    def Finc_hemi(self, pmax = 2.0, steps = 300.0):
+        "total energy (flux) incident on a hemisphere of planet "
+        "depends on temperature of star!!!"
+        # Einc = Finc* integral(phi: 0->2pi, theta: 0->pi/2) rp^2*cos(theta)sin(theta) dtheta dphi
+        # ---- integral overplanet coordinates
+        return self.Finc(pmax, steps)*np.pi*self.Rplanet**2
     
-    def Fleaving(self, pmax = 2.0, steps = 300.0, NSIDE = 8, wavelenght = 8.0):#, TEST = False):
+    def Fleaving(self, pmax = 2.0, steps = 300.0, NSIDE = 8, wavelenght = 8.0, TEST = False):
         "The substellar point is moving in this case"
-        #wavelenght was in micrometers
-        
-        wv = wavelenght*10**(-6)        
+        wv = wavelenght*10**(-6) #wavelenght was in micrometers, it's now in meters
         
         days, d = self.DE(pmax, steps, NSIDE)
+        #these 2 will match with the coordinates of parcel
+        "F = (parcel.sigmaB*(np.array(d[:,:,3])*self.T0)**4)"
         
+        "flux planet/ flux star here"
+        d[:,:,3][d[:,:,3] == 0] = 0.0001 #replace the zeroes at the beginning so they dont overflow
+        Fwv = ((2*self.h*self.c**2/wavelenght**5)*10**(30)*
+        (1/(np.e**((self.h*self.c*10**6)/(wavelenght*self.K*np.array(d[:,:,3])*self.T0))-1)))
         
-
-        d[:,:,2][d[:,:,2] < 0.01] = 0.01 #replace the zeroes at the beginning so they dont overflow
-        
-        #print min(d[:,:,2])
-        #Fwv_ = ((2*self.h*self.c**2/wavelenght**5)*
-        #(1/(np.e**((self.h*self.c*10**6)/(wavelenght*self.K*np.array(d[:,:,2].copy())*self.T0))-1)))
-        
-        #Fwv = Fwv_*10**30
-        
-        a = (2*self.h*self.c**2/wv**5)
-        
-        #print a 
-        b = (self.h*self.c*10**6)/(wavelenght*self.K*self.T0)
-        
-        #print b
-        
-        #Fwv= a* 1/(np.e**(b/np.array(d[:,:,2].copy()))-1)
-        
-        #Fwv = np.zeros(d[:,:,2].shape)
-        #for i in range(len(days)):
-            
-        
-        Fwv = a* 1/(np.expm1(b/np.array(d[:,:,2].copy())))
-            
-            
-        
-            #print min(d[i,:,2])
-        
-        
-        
-        #Fwv_ = (np.log(2*self.h*self.c**2)-np.log(wv**5) + np.log(1) - 
-        #np.log(np.e**((self.h*self.c)/(wv*self.K*np.array(d[:,:,2].copy())*self.T0))-1))
-        
-        #Fwv = np.e**(Fwv_)        
+        "Fpix  = (parcel.sigmaB*(np.array(d[:,:,4])*self.T0)**4)"
+        d[:,:,4][d[:,:,4] == 0] = 0.0001 #replace the zeroes at the beginning so they dont overflow
+        Fwvpix = ((2*self.h*self.c**2/wavelenght**5)*10**(30)*
+        (1/(np.e**((self.h*self.c*10**6)/(wavelenght*self.K*np.array(d[:,:,4])*self.T0))-1)))
+        #weight[j,hp.ang2pix(NSIDE, thetas[j,:], coordsSSP[j,:])]
+        #print F.shape
+        #print Fwv.shape
         
         "Get the flux"
         dA = hp.nside2pixarea(NSIDE)*self.Rplanet**2
-  
-        Fmap_wv = (Fwv.copy()*dA)#/Fwvstar
         
-        Ftotal_ = (self.sigmaB * (d[:,:,2]*self.T0)**4)*dA
+        'Fmap = (F*dA)#/Fstar'
+        Fmap_wv = (Fwv*dA)#/Fwvstar
+        'Fmap_pix = (Fpix*dA)#/Fstar'
+        Fmap_wvpix = (Fwvpix*dA)#/Fwvstar
         
-        crap, Fmap_wvpix = self.shuffle(d, Fmap_wv, pmax, steps, NSIDE)
-
-        
-        """IM INTEGRATING TWICE BECAUSE I WANT TO MAKE SURE LEAVING FLUX AND SHUFFLED
-        LEAVING FLUX ARE THE SAME. THEY ARE """
-        
+        'Fleaving = np.zeros(int(steps * pmax))'
         Fleavingwv = np.zeros(int(steps * pmax))
-        Ftotal = np.zeros(int(steps * pmax))
         for i in range(int(steps * pmax)):
-            
+            'Fleaving[i] = np.sum(Fmap[i,:])'
             Fleavingwv[i] = np.sum(Fmap_wv[i,:])
-            Ftotal[i] = np.sum(Ftotal_[i,:])
+            Fleavingwvpix = np.sum(Fmap_wvpix[i,:])
+            #if np.abs(Fleavingwvpix-Fleavingwv[i]) > 1000:
+                #print (Fleavingwvpix-Fleavingwv[i])
+                #print ("WOW, WHATS WRONG!" + str(i))
             
-        #print Fleavingwv == Fleavingwvpix
-
-
-            
-        #if TEST :
-        #    return days, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Fleavingwvpix     
-        #else:
-        return days, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Ftotal
+        if TEST==True:
+            return days, d ,Fwv, Fwvpix, Fmap_wv, Fmap_wvpix, Fleavingwv     
+        if TEST == False:
+            return days, d, Fmap_wv, Fmap_wvpix, Fleavingwv
         
-
+        else:
+            print "you want all the crap or not?? If yes, set Test = TRUE. Else, set Test = False"
         
         
 
@@ -388,29 +373,31 @@ class parcel:
         tic = time.time()
         print ("Starting Fobs")
         Nmin = int((pmax)*steps)
-        
-        days, d, Fmap_wv, Fmap_wvpix,Fleavingwv, Ftotal = self.Fleaving(pmax, steps, NSIDE, wavelenght)
-        t, weight = self.visibility(pmax, steps, NSIDE, d)
+        days, d, Fmap_wv, Fmap_wvpix, Fleavingwv = self.Fleaving(pmax, steps, NSIDE, wavelenght)
+        t, zt, coordsSSP, coordsSOP, weight, weightpix = self.visibility(pmax, steps, NSIDE, days, d, TEST = False)
         #t, alpha, f = self.f_ratio(pmax, steps)
-        #thetas = d[:,:,0].copy()
+        thetas = d[:,:,1]
         
         
         'used to just use phis = d[:,:,2], same thetas'
 
         #"Fmapobs = Fmap*weight"
-        crap, weightpix = self.shuffle(d, weight, pmax, steps, NSIDE)
         
-        #Fmapwvobs = Fmap_wv*weight
-        Fmapwvobs = Fmap_wvpix*weightpix
-        
+        Fmapwvobs = Fmap_wv*weight
+        Fmap_wvobspix = Fmap_wvpix*weight
 
         
         #"Fleaving = np.empty(Nmin)"
-        #Fmap_wvobspix = np.zeros(weight.shape)
         Fwv = np.empty(Nmin)
         for i in range(Nmin):
-
-            Fwv[i] = np.sum(Fmapwvobs[i,:]) 
+            
+            
+            #"Fmap_pix[i,:] = Fmapobs[i,d[i,:,0].astype(int)]"
+            #Fmap_wvpix[i,:] = Fmapwvobs[i,hp.ang2pix(NSIDE, thetas[i], coordsSSP[i])]
+            'used to have'
+            #Fmap_wvpix[i,:] = Fmapwvobs[i,d[i,:,0].astype(int)]
+            #Fleaving[i] = np.sum(Fmapobs[i,:]) 
+            Fwv[i] = np.sum(Fmap_wvobspix[i,:]) 
             
         
         """
@@ -442,7 +429,7 @@ class parcel:
         print ('Time Fobs took: ' + str(toc-tic) + 'seconds')
         
         if PRINT == False:
-            return  days, d, Fmapwvobs, weight, weightpix, Fwv #*weight
+            return  days, d, Fmapwvobs, Fmap_wvobspix, weight, weightpix, Fwv #*weight
     
 
         
@@ -476,13 +463,13 @@ class parcel:
                 
             phis = coords[:,1]
             thetas = coords[:,0]
-            
+            pixnum = np.arange(len(phis))
             
             #starting Temperatures
             T = (np.sin(thetas)**0.25)*(np.cos(phis)+np.abs(np.cos(phis)))/2
-            
+            Tpix = np.empty(hp.nside2npix(NSIDE))
             #3D array to contain everything    
-            c= np.array(zip(thetas,phis,T)).reshape(-1,hp.nside2npix(NSIDE),3)
+            c= np.array(zip(pixnum, thetas,phis,T, Tpix)).reshape(-1,hp.nside2npix(NSIDE),5)
             d = np.repeat(c,Nmin, axis = 0)
             
             
@@ -492,16 +479,18 @@ class parcel:
                 deltaphi = (2*np.pi/steps)* self.wadv/(2*np.pi/self.P)
                 
                 for i in range(1,Nmin):#phis.shape[2]
-                    phis = d[i-1,:,1]
+                    phis = d[i-1,:,2]
                     dT =(1.0/self.epsilon *(np.cos(phis)+np.abs(np.cos(phis)))/2
-                         *np.sin(thetas) - (d[i-1,:,2])**4 )*deltaphi #calculate change
+                         *np.sin(thetas) - (d[i-1,:,3])**4 )*deltaphi #calculate change
 
-                    temp = d[i-1,:,2]+ dT 
+                    temp = d[i-1,:,3]+ dT 
 
-                    d[i,:,2]= temp #update temperature array
+                    d[i,:,3]= temp #update temperature array
                     "coordinates WRT substellar point!!"
-                    d[i,:,1]= (phis+deltaphi)%(2*np.pi) #-((self.wadv)*t[i] - int(self.wadv*t[i])) #update location of gas parcel
-                    
+                    d[i,:,2]= (phis+deltaphi)%(2*np.pi) #-((self.wadv)*t[i] - int(self.wadv*t[i])) #update location of gas parcel
+                    d[i,:,0]= hp.ang2pix(NSIDE, d[i,:,1], d[i,:,2]) #update pixel number to draw gas parcel at
+                    d[i,:,4]= d[i,d[i,:,0].astype(int),3] # shuffle the temperatures to put them at the right pixel number
+
 
                 toc = time.time()
                 print ("Time this took is: " , str(toc-tic), "seconds")
@@ -516,98 +505,29 @@ class parcel:
                 wrot = (2*np.pi/self.P)* self.wadv/(2*np.pi/self.P)                   
                 deltaphi = wrot*deltat 
                     
-                #parcel.sigmaB*self.Teff**4*(self.Rstar/np.array(self.radius(pmax,steps)[1]))**2    
-                'normalized flux -- (minimum radius/ radius(t))**2'   
-                Fstar = (self.Finc(pmax, steps).reshape(-1,1)) #*Fweight
-             
-                F = Fstar/(parcel.sigmaB*self.Teff**4*(self.Rstar/(self.a*(1-self.e)))**2)
-                #F = ((self.a*(1-self.e)/self.radius(pmax, steps)[1])**2)
-                #Fweight = ((np.cos(coordsSSP)+
-                #   np.abs(np.cos(coordsSSP)))/2.0 * np.sin(thetas))
-                phis0 = d[0,:,1]+SSP[0]
+                    
+                F = ((self.a*(1-self.e)/self.radius(pmax, steps)[1])**2)
+                phis0 = d[0,:,2]
                 for i in range(1,len(t)):
-                        phis = d[i-1,:,1]
+                        phis = d[i-1,:,2]+SSP[0]
                         
                         dT =(( F[i]*(np.cos(phis)+np.abs(np.cos(phis)))/2*np.sin(thetas) - 
-                              (d[i-1,:,2])**4 )* (deltat_))
+                              (d[i-1,:,3])**4 )* (deltat_))
                         
-                        d[i,:,2]= d[i-1,:,2].copy()+dT #update temperature array
+                        d[i,:,3]= d[i-1,:,3]+dT #update temperature array
                         'tricky part. Trying to take into acount how teh SSP moves'
-                        d[i,:,1]= ((phis0 )+ SSP[i]- SSP[0])
+                        d[i,:,2]= ((phis0 )- SSP[i])
                                 #deltaphi)) #%(2*np.pi)) #deltaphi)%(2*np.pi)-
                                 #(zt-(t/self.Porb).astype(int)*2*np.pi)[i]) #update location of gas parcel
+                        d[i,:,0]= hp.ang2pix(NSIDE, d[i,:,1], d[i,:,2]) #update pixel number to draw gas parcel at
+                        d[i,:,4]= d[i,d[i,:,0].astype(int),3] # shuffle the temperatures to put them at the right pixel number
                         
                 toc = time.time()
                 print ("Time DE took: "+ str(toc-tic))
                 return dayss, d 
-                
-    def shuffle (self, d = None, quantity = None, pmax = 2, steps = 300, NSIDE = 8):
-        "d is going to be a array of the form [time, [NSIDE, [phis, thetas, other quantities]]]"
-        
-        if (d is None) and (quantity is None):        
-            days, d = self.DE(pmax, steps, NSIDE)
-            dd = np.array(d.copy())
-            quantity = np.array(d[:,:,2].copy())
-            
-        else:
-            dd = np.array(d.copy())
-        
-        steps = len(dd[:,0,0])
-            #quantity = quantity
-        
-        #order = (hp.ang2pix(NSIDE, d[:,:,0], d[:,:,1])).astype(int)
-        #print order.shape
-        #quantity = quantity[order]
-        order = np.zeros((steps, hp.nside2npix(NSIDE)))
-        for i in range(steps):        
-            order[i,:] = (hp.ang2pix(NSIDE, dd[i,:,0], dd[i,:,1])).astype(int)
-                    
-            quantity[i,:] = quantity[i,order[i,:].astype(int)]
-        
-        print("shuffled quantity" )
-        return d, quantity
-            
-    def contours_illum():
-                #contours of equal illumination theta
-        
-        c_thetas1 = []
-        c_phis1 = []
-        for i in range(int(pmax*steps)):
-            c_t = thetas[i,np.where(np.abs(Fweight[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            c_p = coordsSSP[i,np.where(np.abs(Fweight[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            c_thetas1.append(c_t)
-            c_phis1.append(c_p)
-        
-        c_thetas7 = []
-        c_phis7 = []
-        for i in range(int(pmax*steps)):
-            c_t = thetas[i,np.where(np.abs(Fweight[i,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            c_p = coordsSSP[i,np.where(np.abs(Fweight[i,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            'should we put these angles in substellat point coordinates or what? '
-            c_thetas7.append(c_t)
-            c_phis7.append(c_p)
             
             
-    def contours_vis():
-                #contours of equal illumination theta
-        
-        c_thetas1 = []
-        c_phis1 = []
-        for i in range(int(pmax*steps)):
-            c_t = thetas[i,np.where(np.abs(weight[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            c_p = coordsSSP[i,np.where(np.abs(weight[i,:]-1)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            c_thetas1.append(c_t)
-            c_phis1.append(c_p)
-        
-        c_thetas7 = []
-        c_phis7 = []
-        
-        for j in range(int(pmax*steps)):
-            c_t = thetas[j,np.where(np.abs(weight[j,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            c_p = coordsSSP[j,np.where(np.abs(weight[j,:]-0.7)< 0.02)]# for c in (1, 0.7, 0.4, 0.1))]
-            'should we put these angles in substellar point coordinates or what? '
-            c_thetas7.append(c_t)
-            c_phis7.append(c_p)                   
+                        
     def findT (self, pmax=2.0, steps = 300.0):
         
         #tmax = self.P*pmax
