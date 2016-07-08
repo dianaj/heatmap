@@ -96,6 +96,7 @@ class parcel:
     
     h = 6.626070040*10**(-34) #J*s
     c = 299792458 #m/s
+
     
     
     def __init__(self, name = 'HotWaterEarth', Teff =6000.0, Rstar = 1.0, Mstar = 1.0, Rplanet = 1.0870, a = 0.1589, 
@@ -230,10 +231,11 @@ class parcel:
             self.epsilon = self.tau_rad * np.abs(self.wadv)
             
         else:
+            self.epsilon = epsilon
             self.tau_rad = np.abs(self.epsilon/self.wadv)
         
         self.rotationsPerOrbit = int(self.Porb/self.P)+1 #used for giving the default time lenght for DE
-        self.rotationsPerDay = int(self.P/self.days) #used for giving the default precision for DE
+        self.rotationsPerDay = int(self.P/self.days)+1 #used for giving the default precision for DE
         #self.Teq = (((1-A)*F(t)*np.sin(theta)*np.max(cos(phi(t)),0))/sigmaB)**(0.25)
         
     
@@ -982,7 +984,7 @@ class parcel:
                 return t, d 
 
     
-    def Fleaving(self, pmax = 3.0, steps = 300.0, NSIDE = 8, wavelenght = 8.0):#, TEST = False):
+    def Fleaving(self, pmax = 3.0, steps = 300.0, NSIDE = 8, wavelenght = 8.0, MAP = False):#, TEST = False):
         """Calculates outgoing planetary flux (Total and wavelenght dependant)
         from the temperature values coming from the DE. 
 
@@ -1087,20 +1089,27 @@ class parcel:
         
         Ftotal_ = (self.sigmaB * (d[:,:,2]*self.T0)**4)*dA
         
-        crap, Fmap_wvpix = self.shuffle(d, Fmap_wv, pmax, steps, NSIDE)
+        
 
         
-        Fleavingwv = np.zeros(int(stepsi * pmaxi))
-        Ftotal = np.zeros(int(stepsi * pmaxi))
-        for i in range(int(stepsi * pmaxi)):
+        
             
-            Fleavingwv[i] = np.sum(Fmap_wv[i,:])
-            Ftotal[i] = np.sum(Ftotal_[i,:])
+        if MAP:
+            Fleavingwv = np.zeros(int(stepsi * pmaxi))
+            Ftotal = np.zeros(int(stepsi * pmaxi))
+            for i in range(int(stepsi * pmaxi)):
+            
+                Fleavingwv[i] = np.sum(Fmap_wv[i,:])
+                Ftotal[i] = np.sum(Ftotal_[i,:])
+            crap, Fmap_wvpix = self.shuffle(d, Fmap_wv, pmax, steps, NSIDE)
 
-        return t, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Ftotal
+            return t, d, Fmap_wv, Fmap_wvpix, Fleavingwv, Ftotal
+            
+        else:
+            return t, d, Fmap_wv
 
     
-    def Fobs(self, pmax = 3.0, steps = 300.0, NSIDE = 8, wavelenght = 8.0, PRINT = False):
+    def Fobs(self, pmax = 3.0, steps = 300.0, NSIDE = 8, wavelenght = 8.0, PRINT = False, MAP = False):
         """ Calculates outgoing planetary flux as seen by an observer (wavelenght dependant).
         
 
@@ -1189,53 +1198,61 @@ class parcel:
    
             """
         
-        tic = time.time()
+        #tic = time.time()
         print ("Starting Fobs")
-        
-        'call the functions we need'
-        t, d, Fmap_wv, Fmap_wvpix,Fleavingwv, Ftotal = self.Fleaving(pmax, steps, NSIDE, wavelenght)
-        
-        t, weight = self.visibility(pmax, steps, NSIDE, d)
-
-        crap, weightpix = self.shuffle(d, weight, pmax, steps, NSIDE)
-        
-        
-        'start doing what this function does'
-
         pmaxi = pmax * self.rotationsPerOrbit
         stepsi = steps * self.rotationsPerDay
-        
+            
         Nmin = int((pmaxi)*stepsi)
         
+        if MAP:
         
-        #UNCOMMENT IF YOU WANNA CHECK THAT THE SHUFFLING ISNT DESTROYING ANYTHING
-        Fmapwvobs = Fmap_wvpix*weightpix
-        #Fmapwvobs_check = Fmap_wv*weight
-        Fwv = np.empty(Nmin)
-        #Fwv_check = np.empty(Nmin)
-        for i in range(Nmin):
-
-            Fwv[i] = np.sum(Fmapwvobs[i,:])
-            #Fwv_check[i] = np.sum(Fmapwvobs_check[i,:])
+            'call the functions we need'
+            t, d, Fmap_wv, Fmap_wvpix,Fleavingwv, Ftotal = self.Fleaving(pmax, steps, NSIDE, wavelenght, MAP = True)
             
-        #print "DO we get the same flux before and after shuffling? " 
-        #print (Fwv == Fwv_check)
-
-        if PRINT == True:
+            t, weight = self.visibility(pmax, steps, NSIDE, d)
+    
+            crap, weightpix = self.shuffle(d, weight, pmax, steps, NSIDE)
             
-            fluxwv = np.array(Fwv).reshape(-1,1)
-            np.savetxt('observedflux_planet'+str(steps)+'_steps_per_period_'+str(pmaxi)+'periods_'
-                       +str(NSIDE)+'_NSIDE.out', 
-                       zip( t, fluxwv), header = "time(planetdays),time(s), outgoing flux, outgoing flux per wv")
-        toc = time.time()
-        print ('Done with Fobs')
-        print ('Time Fobs took: ' + str(toc-tic) + 'seconds')
-        
-        if PRINT == False:
-            return  t, d, Fmapwvobs, weight, weightpix, Fwv
-    
+            
+            'start doing what this function does'
 
+            #UNCOMMENT IF YOU WANNA CHECK THAT THE SHUFFLING ISNT DESTROYING ANYTHING
+            Fmapwvobs = Fmap_wvpix*weightpix
+            #Fmapwvobs_check = Fmap_wv*weight
+            Fwv = np.empty(Nmin)
+            #Fwv_check = np.empty(Nmin)
+            for i in range(Nmin):
     
+                Fwv[i] = np.sum(Fmapwvobs[i,:])
+                #Fwv_check[i] = np.sum(Fmapwvobs_check[i,:])
+                
+            #print "DO we get the same flux before and after shuffling? " 
+            #print (Fwv == Fwv_check)
+    
+            if PRINT == True:
+                
+                fluxwv = np.array(Fwv).reshape(-1,1)
+                np.savetxt('observedflux_planet'+str(steps)+'_steps_per_period_'+str(pmaxi)+'periods_'
+                           +str(NSIDE)+'_NSIDE.out', 
+                           zip( t, fluxwv), header = "time(planetdays),time(s), outgoing flux, outgoing flux per wv")
+            #toc = time.time()
+            #print ('Done with Fobs')
+            #print ('Time Fobs took: ' + str(toc-tic) + 'seconds')
+            
+            if PRINT == False:
+                return  t, d, Fmapwvobs, weight, weightpix, Fwv
+    
+        else:
+            t, d, Fmap_wv = self.Fleaving(pmax, steps, NSIDE, wavelenght)
+            t, weight = self.visibility(pmax, steps, NSIDE, d)
+            Fmapwvobs = Fmap_wv*weight
+            Fwv = np.sum(Fmapwvobs, axis = 1)
+            
+
+                
+            return t, d, Fwv
+
                     
     def shuffle (self, d = None, quantity = None, pmax = 3.0, steps = 300, NSIDE = 8):
         """ This function will take an array for a quantity as well as it's coordinates
@@ -1363,25 +1380,33 @@ class parcel:
         pmaxi = pmax * self.rotationsPerOrbit
         stepsi = steps * self.rotationsPerDay
         
-        phi, days, T = self.DE(pmax, steps)
+        t, d = self.DE(pmax, steps)
         
         
         deltaphi = 2.0/steps
-        Tmax = np.max(T[int(stepsi*(pmaxi-2))::])
+        Tmax = np.max(d[int(stepsi*(pmaxi-2))::,:,2])
         
             
-        for i in range(int(stepsi*(pmaxi-2)), len(phi)):
+        for i in range(int(stepsi*(pmaxi-2)), int(stepsi*pmaxi)):
             
             
             
-                if deltaphi >= np.abs(1.5 - (phi[i]-2*(pmaxi-2))):
+                #if deltaphi >= np.abs(1.5*np.pi - (d[i,np.where(np.abs(d[i,:,0]-0.5*np.pi))< 0.1, np.where(np.abs(d[i,:,1]-1.5*np.pi))< 0.1]):
                     #print np.abs(1.5 - phi[i])*np.pi, 'dawn difference' 
-                    Tdawn = T[i]
+                    #Tdawn = T[i]
+                Tdawn = (d[i,np.where((0 <(d[i,:,0]-0.5*np.pi)) & ((d[i,:,0]-0.5*np.pi)< 0.4) 
+                            & (np.abs(d[i,:,1]-(1.5)*np.pi)< 5*deltaphi)), 
+                           2])
                 
-                if deltaphi >= np.abs(2.5 - (phi[i]-2*(pmaxi-2))):
+                Tdusk = (d[i,np.where((0 <(d[i,:,0]-0.5*np.pi)) & ((d[i,:,0]-0.5*np.pi)< 0.4) 
+                            & (np.abs(d[i,:,1]-(0.5)*np.pi)< 5*deltaphi)), 
+                           2])
+
+                
+                #if deltaphi >= np.abs(2.5 - (phi[i]-2*(pmaxi-2))):
                     #print np.abs(2.5 - phi[i])*np.pi, 'dusk difference'
 
-                    Tdusk = T[i]
+                    #Tdusk = T[i]
             
         return Tmax, Tdawn, Tdusk
         
@@ -1550,5 +1575,26 @@ def contours_illum():
             'should we put these angles in substellar point coordinates or what? '
             c_thetas7.append(c_t)
             c_phis7.append(c_p)                   
+    
+"""
+
+if __name__ == '__main__':
+    
+    #import time 
+    tic = time.time()
+    hd = parcel(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1.0/2, 
+                      tau_rad = 20 , argp = 121.71, Rstar = 1.5, Mstar = 1.275)
+                      
+"""
+                      
+    t, d, Fwv = hd.Fobs(NSIDE=4)
+                
+    toc = time.time()
+    print "Time this took is "+ str(toc-tic)
+    import matplotlib.pyplot as plt
+
+
+    
+    plt.plot(t, Fwv)
     
 """
