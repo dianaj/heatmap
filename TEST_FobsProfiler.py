@@ -11,35 +11,16 @@ import matplotlib.pyplot as plt
 #from scipy import integrate
 #from PyAstronomy import pyasl
 import healpy as hp
-from Parcel_healpy4 import parcel as p
+from Parcel_healpy5 import parcel as p
 from timer import Timer
 
-
-
-hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1.0/2, 
-                  tau_rad = 20 , argp = 121.71, Rstar = 1.5, Mstar = 1.275)
-                  
-
-
-# In[11]:
-with Timer() as t:
-    hd.Fleaving()
-print "=> elasped Fleaving: %s s" % t.secs
-
-with Timer() as t:
-    hd.Fobs()
-print "=> elasped Fobs: %s s" % t.secs
-
-with Timer() as t:
-    hd.DE()
-print "=> elasped DE: %s s" % t.secs
 
 
 # In[11]:
 
 x0 = p(name = "XO-3b",Teff = 6781, e=0.26, Porb = 3.19, a = 0.0454, wadv = 1.0/2, 
                   tau_rad = 20, argp = 346, Rstar = 1.49, Mstar = 1.41, 
-                  Rplanet = 1.217)
+                  Rplanet = 1.217, pmax = 4, NSIDE = 4)
 import cProfile
 
 def do_cprofile(func):
@@ -59,12 +40,37 @@ def do_cprofile(func):
 @do_cprofile
 def expensive_function():
     
-    return x0.Fobs(pmax = 2, NSIDE = 4)
+    return x0.Fobs()
 
 # perform profiling
 result = expensive_function()
 # In[11]:
 
+
+# In[11]:
+
+hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1.0/2, 
+                  tau_rad = 20 , argp = 121.71, Rstar = 1.5, Mstar = 1.275, NSIDE = 4)
+                  
+
+
+# In[11]:
+with Timer() as t:
+    hd.Fleaving()
+print "=> elasped Fleaving: %s s" % t.secs
+
+with Timer() as t:
+    hd.Fobs()
+print "=> elasped Fobs: %s s" % t.secs
+
+with Timer() as t:
+    hd.DE()
+print "=> elasped DE: %s s" % t.secs
+
+
+# In[11]:
+
+"""
 try:
     from line_profiler import LineProfiler
 
@@ -104,9 +110,22 @@ def expensive_function():
 result = expensive_function()
 
 # In[12]:
+class SomeClass(object):
+
+    def __setattr__(self, name, value):
+        print(name, value)
+        self.__dict__[name] = value*12
+
+    def __init__(self, attr1, attr2):
+        self.attr1 = attr1
+        self.attr2 = attr2
 
 
-#plt.plot(t,TA)
+sc = SomeClass(attr1=1, attr2=2)
+
+sc.attr1 = 3
+
+#plt.plot(t,TA)"""
 # In[12]:                
 
  
