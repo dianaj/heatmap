@@ -21,47 +21,44 @@ from Parcel_healpy4 import parcel as p
 
 # In[11]:
 
-hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, P = 0.3, wadv = 2, 
-                  epsilon = 3.2*11, argp = 90-121.71, Rstar = 1.5, Mstar = 1.275)
+hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1.0/2, 
+                  tau_rad = 20 , argp = 121.71, Rstar = 1.5, Mstar = 1.275)
 
 
 # In[12]:
 
+t, alpha, f = hd.f_ratio(pmax =3)
+t, zt, SSP, SSO = hd.SSP(pmax = 3)
 
-#t, ang_vel = gas.ang_vel(pmax =23, steps = 100)
-#t, weight = gas.weight(pmax =100)
-t, alpha, f = hd.f_ratio(pmax =150)
-t, zt, SSP, SSO = hd.SSP(pmax = 150)
-#days, d  = hd.DE(pmax = 150)
 
-t, d, thetas, coordsSSP, coordsSOP, weight = hd.visibility(pmax = 150, TEST = True)
+t, d, coordsSOP, weight = hd.visibility(pmax = 3, TEST = True)
 
-# In[12]:
-t, alpha, f = hd.f_ratio(pmax =150)
-
+coordsSSP = d[:,:,1]
 
 # In[12]:
+
+'''THERE's SOME KINKS IN THIS ONE'''
 
 fig, ax = plt.subplots(3,  figsize = (18,24))
 
-ax[0].set_title("HD ~2 orbital periods, 150 rotations")
+ax[0].set_title("HD ~3 orbital periods, 20 rotations")
 ax[0].plot(t, SSP, label = 'SubStelar angle')
 ax[0].plot(t,SSO, label = 'SubObs angle')
 ax[0].set_xlabel('Time(seconds)', fontsize = 16)
 ax[0].set_ylabel('Angle ( rads)', fontsize = 16)
 ax[0].plot(t,(-alpha+180)/57.29, label = "Alpha the phase angle")
-ax[0].legend()
+ax[0].legend(fontsize = 8)
 
 ax[1].set_title("ZOOM")
 #ax[1].plot(t, SSP, label = 'SubStelar angle')
 #ax[1].plot(t,SSO, label = 'SubObs angle')
-ax[1].plot(t,d[:,360,1], label = 'parcel location rel. to SSP ')
-ax[1].plot(t,coordsSOP[:,360], label = 'parcel location rel to SOP')
+ax[1].plot(t/hd.P,d[:,360,1], label = 'parcel location rel. to SSP ')
+ax[1].plot(t/hd.P,coordsSOP[:,360], label = 'parcel location rel to SOP')
 ax[1].set_xlabel('Time(seconds)', fontsize = 16)
 ax[1].set_ylabel('Angle ( rads)', fontsize = 16)
-ax[1].legend()
+ax[1].legend(fontsize = 8)
 #ax[1].plot(t,(-alpha+180)/57.29, label = "Alpha the phase angle")
-ax[1].set_xlim(0,4000000)
+ax[1].set_xlim(10,18)
 #ax[1].set_ylim(-6,0)
 
 ax[2].set_title("Difference")
@@ -72,7 +69,7 @@ ax[2].set_xlabel('Time(seconds)', fontsize = 16)
 ax[2].set_ylabel('Angle ( rads)', fontsize = 16)
 ax[2].plot(t,(-alpha+180)/57.29, label = "Alpha the phase angle")
 ax[2].plot(t,f, label = "f_ratio")
-ax[2].legend()
+ax[2].legend(fontsize = 8)
 ax[2].set_xlim(0,4000000)
 #plt.plot(t,weight[:,[200,300]])
 #plt.xlim(0,2000000)
@@ -85,8 +82,8 @@ fig.savefig("SSP and SSO")
 # In[12]:
 
 """Let's figure out how the radius calculation works """
-from __future__ import print_function, division
-import numpy as np
+#from __future__ import print_function, division
+#import numpy as np
 from PyAstronomy import pyasl
 import matplotlib.pylab as plt
 
@@ -159,7 +156,7 @@ ascn1, descn1 = ke1.xyzNodes_LOSZ()
 fig, ax = plt.subplots(3,2, figsize = (14,14))
 
 ax[0,0].set_title("Orbital Position: e = "+str(ec)+", Omega = "+str(Om)+", Inc = "+str(inc)+", w = "+str(w0))
-ax[0,0].set_xlabel("East ->")
+
 ax[0,0].set_ylabel("North ->")
 ax[0,0].plot([0], [0], 'k+', markersize=9)
 ax[0,0].plot(pos[::,1], pos[::,0], 'bp')
