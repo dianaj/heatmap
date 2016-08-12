@@ -16,18 +16,7 @@ wadv. It'll be quicker... and not return any maps and crap.
 - I removed the unfinished countour shit. I can find them in #5 if i need to finish them and add them later.
 """
 """
-Created on Wed Jun 22 17:22:17 2016
-
-@author: diana
-
-NEW in #5:
-
-gonna condense all the coordinate functions, maybe make it faster. 
-
-This module allows you to create a planet object and calculate the planetary 
-phase curve for an arbitrary number of orbits (default is 3).  
-
-
+ 
 Example
 -------
 
@@ -43,7 +32,6 @@ TO DO
 - Try to get Temperatures to not start at 0. 
         They should start somewhere good... based on taurad and wadv and T0
         
-- start documenting!!!
 
 - include TESTs for most functions that are easy to run. 
         maybe have a TEST file and in case of TEST = TRUE have the function call that file and 
@@ -52,15 +40,23 @@ TO DO
         
 -  NEED A GET ITEM METHOD SO WE CAN CHANGE VALUES IN AN OBJECT WITHOUT CHANGING THE WHOLE THING
 """
+"""
+This module contains 2 classes. 
 
+-parcel allows you to create a planet object and calculate the planetary 
+phase curve for an arbitrary number of orbits (default is 3).  
 
+-fitter is  a subclass of parcel. It takes an arbitrary time array and a parcel object as input 
+and stitches it to the defaults 'parcel' time 
+array. It then outputs a planetary phase curve for only the time values in your time array. 
+It can be used for fitting for parameters tau_rad and wadv"""
 
 import numpy as np
 #import matplotlib.pyplot as plt
 #from scipy import integrate
 from PyAstronomy import pyasl
 import healpy as hp
-import time 
+
 
 
 
@@ -68,8 +64,10 @@ import time
 class parcel(object):
 
 
-    """This class allows you to create a planet object and assign it appropriate orbital and planetary parameters.
-    It uses class functions to calculate the planetary phase curve (emmitted flux) for an arbitrary number of orbits (default is 3). 
+    """This class allows you to create a planet object and assign it appropriate orbital 
+    and planetary parameters.It uses class functions to calculate the planetary phase curve 
+    (emmitted flux) for an arbitrary number of orbits (default is 3). Use this class if you 
+    want to make figures. Use the fitter class for fitting.
 
     Note
     ----
@@ -80,22 +78,26 @@ class parcel(object):
     ------------------------------------------------
     (instance variables unique to each instance???)
 
-    Params that will appear in functions 
+    Params that you might want to change 
     ------------------------------------
         pmax
                 int; Number of orbital periods we will integrate for. Default  is 3.
+                Might need more for large values of the radiative time scale because you want the DE
+                to have time to reach a stable state.  
         steps
-                int; number of steps PER 24 hours. Default is 300.
+                int; number of steps PER 24 hours. Default is 300. This gives nice smooth
+                curves for making figures. For fitting, i find that 100 works fine but you can exeriment 
+                with that. 
             
         NSIDE
                 power of 2; healpix parameter that determines 
                 number of pixels that will subdivide the planet surface ;
                 NPIX = 12* NSIDE**2.
                 (ex: 192 pixels --> NPIX = 192, NSIDE = 4; 798 pixels --> NPIX = 798, NSIDE = 8)
-                Default is 8 but might work fine with 4.
+                Default is 8 but 4 is good enough and you should use 4 for fitting or it takes too long.
                 
         wavelenght
-                Values shoyld be entered in micrometers. 
+                Values should be entered in micrometers. 
                 Used for inc/ emmitted flux calculations at this particular wavelenght.
                 Default is 8.
                 
@@ -119,7 +121,8 @@ class parcel(object):
 
 
     
-    def __init__(self, name = 'HotWaterEarth', Teff =6000.0, Rstar = 1.0, Mstar = 1.5, Rplanet = 1.0870, a = 0.05, 
+    def __init__(self, name = 'HotWaterEarth', Teff =6000.0, Rstar = 1.0, Mstar = 1.5, 
+                 Rplanet = 1.0870, a = 0.05, 
                  e = 0.1, argp = 0, 
                  A = 0, ro = 100.0 , cp = 4200.0, H= 5.0, hh = 14121.0, Porb = -1, 
                  wadv = 2, tau_rad = 20, epsilon = None, pmax = 3, steps = 300, NSIDE = 8):
@@ -158,7 +161,7 @@ class parcel(object):
             eccentricity
         
         argp (float):
-            Argument at periastron in degrees - angle betwen periatron and transit in degrees 
+            Argument at periastron in degrees - angle betwen periastron and transit in degrees 
 
         A : Bond albedo (set to 0)
             Model doesn not handle reflected light right now. Setting albedo to a different value 
@@ -197,8 +200,9 @@ class parcel(object):
                 if wadv = 2 it means that it takes 1 rotaions of the planet for the gas to leave the Substellar point 
                 and come back (go through all its temperatures)
                 
-                
-            
+                in the eccentric case: this is more complicated. If wadv = 1 it can be interpreted as 
+                the substellar point and the gas being stationary wrt each other at periastron.
+ 
         T0 : not used in calculations
             Initial temperature of gas at substellar point at periastron. 
             
@@ -215,7 +219,7 @@ class parcel(object):
             and tau_rad left blank.              
 
         
-        rotationsPerOrbit : int(self.Porb/self.P)+1 
+        rotationsPerOrbit : np.ceil(max(self.Porb/self.P),1) 
             
             used for giving the default time lenght for DE
         
@@ -242,15 +246,16 @@ class parcel(object):
         
         t -time array (1D)
                 
-        radius(t) -orbital separation array
+        radius -orbital separation array
         
-        ang_vel(t) - orbital angular velocity array
+        ang_vel - orbital angular velocity array
         
-        alpha(t) - phase angle array
+        alpha - phase angle array
         
-        f(t) - illuminted fraction array
+        f - illuminted fraction array
         
-        phis, thetas - initial pixel coordinates
+        phis, thetas - initial pixel coordinates. starting point for each gas parcel
+        on the planet
         
         
         """
@@ -304,14 +309,9 @@ class parcel(object):
         self.pmaxi = self.pmax * self.rotationsPerOrbit #number of rotational periods we will integrate for 
         self.stepsi = self.steps * self.rotationsPerDay #steps per rotational period 
         
-        'this needs to change to reflect updated times'
+        
         t, radius, ang_vel, alpha, f = self.radiuss() 
         
-        "this could be put in the subclass, it's only used to stitch together the time array"        
-         #temporary time array we might change or not
-            
-        
-            
 
         self.t = t    
         self.radius = radius
@@ -370,7 +370,7 @@ class parcel(object):
                                self.cp, self.hh/1000, self.H/self.hh,self.P/parcel.days, self.Porb/parcel.days, 
                                 self.ch, self.wadv*self.P/ (2*np.pi), 
                                 self.T0, self.tau_rad/ 3600.0, 
-                                self.epsilon, int(self.Porb/self.P), int(self.P/self.days) ))
+                                self.epsilon, self.rotationsPerOrbit, self.rotationsPerDay ))
                                 
      
     """ FUNCTIONS FOR DEFINING THE PLANET CONDITIONS, STELLAR FLUX """
@@ -403,14 +403,15 @@ class parcel(object):
     
     def Fstar(self, wavelenght = 8.0):
 
-        """Calculates total flux emmitted by the star AND wavelenght dependent flux.
+        """Calculates total flux emmitted by the star and wavelenght dependent flux.
         
-        Used to express flux emmitted by the planet as a fraction of stellar flux. 
+        Used for normalizing planet flux. (i.e. to express flux emmitted by the planet as 
+        a fraction of stellar flux. )
         
         Note
         ----
              F = sigmaB * Teff**4 * Pi * Rstar**2.
-             fwv = BBflux(wv) * Pi * Rstar**2
+             Fwv = BBflux(wv) * Pi * Rstar**2
              
     
         Parameters
@@ -448,12 +449,10 @@ class parcel(object):
         Note
         ----
              sigmaB*Teff**4*(Rstar/r(t))**2.
-             
-
-        Calls
-        -------
-            
-            self.radius(pmax, steps) to get orbital separation.
+        
+        Parameters 
+        ----------
+            None. 
             
         Returns
         -------
@@ -469,12 +468,8 @@ class parcel(object):
         
     def Finc_hemi(self):
         
-        """Flux incident on the lighted hemisphere of planet. Used for normalizing things mostly.
+        """Energy incident on the lighted hemisphere of planet. Used for nothing, actually.
 
-        Note
-        ----
-             Analytic integral of incoming flux over hemisphere.
-             
     
         Parameters
         ----------
@@ -511,9 +506,10 @@ class parcel(object):
 
         Note
         ----
-             Could be combined with the other functions in this section, it uses the same stuff.
-             Might want to review the Omega and w arguments that i'm passing to 
-             pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp) 
+             The fitter class calls this for an initial time array, changes the time array, then calls
+             it's own radius function to get these quantities for an input time array.
+             
+             It works for now but it's buggy. Might want to review this interaction.
              
     
         Parameters
@@ -533,6 +529,17 @@ class parcel(object):
                     
                 radius (1D array)
                     Same lenght as t. Orbital separation radius array (as a function of time) 
+                    
+                ang_vel (1D array)
+                    Orbital angular velocity as a function of time.
+                    
+                alpha (1D array)
+                    Phase angle as a function of time.
+                    (90-self.argp) - np.array(TA)*57.2958
+                    
+                f (1D array)
+                    Planet illuminated fraction
+                    0.5*(1-np.cos(alpha*np.pi/180.0))
 
             """   
         pmaxi = self.pmaxi
@@ -574,27 +581,22 @@ class parcel(object):
     def SSP(self):
 
         """
-        DEPENDS ON WADV!! CAN'T be stored in __init__       
+             
         Calculates coordinates of substellar point wrt to the location of the 
         substellar point at periastron (theta = Pi/2, phi =0). 
+        Used to rotate the coordinate array array as a function of time .
         
-        Also calculates coordinates of subobserver location wrt subobserver location at periastron, 
-        which is only used for testing. 
+        Also calculates coordinates of subobserver location wrt subobserver location at periastron.
         
         Note
         ----
-             Could be combined with self.radius, it uses the same stuff.
-             Location of SOP at periastron should be related to argument at periastron. 
-             My calculation is a bit iffy but seems to work. 
+             DEPENDS ON WADV!! CAN'T be stored in __init__ . I tried. 
     
         Parameters
         ----------
             None
 
-        Uses
-        -------
-            
-            pyasl from PyAstronomy to calculate true anomaly
+        
             
         Returns
         -------
@@ -609,10 +611,10 @@ class parcel(object):
                     Same lenght as t. SSP = ((zt mod (2 Pi/ Rotation)) mod (2 Pi/ orbit));
                     Gives coordinate of substellar point relative 
                     to the substellar point at periastron (located at theta = Pi/2, phi = 0).
-                    Used to rotate the coordinate array array as a function of time .
+                    
                 
                 SOP (1D array)
-                    Coordinates of sub-observer point mod (2Pi/Rotation)
+                    Coordinates of sub-observer point mod (2Pi/Rotation). Only used for testing.
     
             """
         
@@ -646,15 +648,15 @@ class parcel(object):
 
         """Creates coordinate matrix wrt substellar point at each point in time. 
         Creates initial temperature array. 
-        Calculates weight function to that will be applied to stellar flux to obtain 
+        Calculates weight function to be applied to stellar flux to obtain 
         incident flux a each location on the planet, at each point in time.
 
         Note
         ----
-            DEPENDS ON WADV; CAN'T BE STORED IN INIT
-            In places where initial temperature is 0, we replace T = 0 with T = 0.01 to avoid overflows.
+            DEPENDS ON WADV; CAN'T BE STORED IN __init__
+            In places where initial temperature is 0, we replace T = 0 with T = 0.1 to avoid overflows.
             At t = 0, the planet is at periastron and the substellar point 
-            is located at theta = Pi	/2, phi = 0
+            is located at theta = Pi/2, phi = 0
     
         Parameters
         ----------
@@ -752,21 +754,22 @@ class parcel(object):
         
     def visibility(self, d = None, TEST = False):
         
-        """Calculates the visibility of each gas parcel on the planet, i.e. how much flux is recieved by an 
+        """Calculates the visibility of each gas parcel on the planet, 
+        i.e. how much flux is recieved by an 
         observer from each location on the planet as a function of time.
 
         Note
         ----
             DEPENDS ON WADV; CAN'T BE STORED IN INIT
             weight = ((np.cos(coordsSOP)+np.abs(np.cos(coordsSOP)))/2.0)*np.sin(thetas)
-            the phase angle alpha is a bit of a mystery
+            
     
         Parameters
         ----------
 
             d (3D array, optional)
                 position and temperature array; is provided as an argument by self.Fobs; 
-                if not provided, self.illum(pmax, steps) will be called and the array d will be calculated 
+                if not provided, self.illum() will be called and the array d will be calculated 
                     
                     shape = (len(time), NPIX, 3)
                     
@@ -777,7 +780,8 @@ class parcel(object):
                     
                     d[:,:,2] = starting temperature array
                     
-                    d[458,234,2] = position wrt to substellar point of parcel # 234 at timestep 458
+                    EX: 
+                    d[458,234,1] means: position wrt to substellar point of parcel # 234 at timestep 458
                     
             TEST (bool)
                 Usually False     
@@ -785,15 +789,7 @@ class parcel(object):
         Calls
         -------
             
-            self.f_ratio(pmax, steps) to get: (STORED IN __INIT__)
-                
-                t
-                    1D time array of lenght pmax * int(Porb/ 24hrs)*steps; 
-                    in seconds
-                
-                alpha
-                    1D array, same lenght as t. The phase angle. Gives angle between substellar point 
-                    and subobserver location. 
+            if d is None, calls self.illum() to get d.
                     
             
         Returns
@@ -805,9 +801,7 @@ class parcel(object):
                     visibility array to be applied to flux array in coordinates wrt SSP
                 
             if TEST = True
-                t (1D array)      
-                    time array in seconds
-                
+
                 d (3D array)     
                     coordinates wrt SSP and temperature aray
                 
@@ -816,6 +810,7 @@ class parcel(object):
                 
                 weight (2D array )
                     visibility array to be applied to flux array in coordinates wrt SSP
+                    (shape is (#time steps, NPIX))
 
     
             """        
@@ -863,7 +858,7 @@ class parcel(object):
 
         weight = ((np.cos(coordsSOP)+np.abs(np.cos(coordsSOP)))/2.0)*np.sin(thetas)
 
-        """THIS USES RESULT FROM ILLUM> MAYBE THEY CAN BE TOGETHER???"""
+        "THIS USES RESULT FROM ILLUM... MAYBE THEY CAN BE TOGETHER???"
         if TEST :
             return d, coordsSOP, weight
         else:
@@ -872,11 +867,11 @@ class parcel(object):
         
         
         
-    def DE(self, fit = False):
+    def DE(self):
             
             
             """DE that calculates temperature of each gas parcel as a 
-            function of time . Relies on self.illum(pmax, steps, NSIDE) to 
+            function of time . Relies on self.illum() to 
             pass it a time array and coordinates. 
 
             Note
@@ -884,6 +879,7 @@ class parcel(object):
             Solves the DE by repeatedly adding dT to previous T value. 
             Might want to change this to a more sophisticated 
             differential equation solver.
+             
     
             Parameters
             ----------
@@ -896,6 +892,7 @@ class parcel(object):
                 t
                     1D time array of lenght pmax * int(Porb/ 24hrs)*steps; 
                     in seconds
+                    (if called by a fitter object it'll take the custom time array)
                 
                 d 
                     3D position and temperature array;
@@ -914,14 +911,18 @@ class parcel(object):
             Returns
             -------
             t
-                unchanged
+                if called by fitter object, will return the backend of the time array 
+                (i.e. the part you need for fitting)
+                
+                if called by parcel object will return t unchanged
                 
             d 
-                only change is to replace the starting temperature values
+                will return the part of the array that matches t, depending on who's calling the function.                
+                
+                only other change is to replace the starting temperature values
                 with values calculated by the DE
-                                        
-    
-    
+                
+
             """
             
             #print "Starting DE"
@@ -956,11 +957,12 @@ class parcel(object):
                         
                     #toc = time.time()
                     #print ("Time this took is: " , str(toc-tic), "seconds")
-                        if fit:
-                            return t, d, Fweight
-                            
-                        else:
-                            return t, d
+                        
+                    try:
+                        return t[self.stitch_point::], d[self.stitch_point::,:,:]
+                        
+                    except AttributeError:
+                        return t, d
                 
                 
                     
@@ -998,11 +1000,11 @@ class parcel(object):
                             
                             
                     
-                        try:
-                            return t[self.stitch_point::], d[self.stitch_point::,:,:]
-                            
-                        except AttributeError:
-                            return t, d
+                    try:
+                        return t[self.stitch_point::], d[self.stitch_point::,:,:]
+                        
+                    except AttributeError:
+                        return t, d
 
     
     def Fleaving(self, wavelenght = 8.0, MAP = False):#, TEST = False):
@@ -1011,7 +1013,8 @@ class parcel(object):
 
             Note
             ----
-            Has an overflow problem sometimes. 
+            Has an overflow problem sometimes, especially for tau_rad ~ 0. That causes nightside 
+            temperatures to be close to 0 and the division in BB flux blows up.
         
     
             Parameters
@@ -1020,13 +1023,17 @@ class parcel(object):
             wavelenght
                 in micrometers; wavelenght to calculate the flux at. 
                 
+            MAP:
+                Default is False.
+                Use True if you want to draw flux leaving from the planet on a map.
+                
+                
             Calls
             -------
             
             self.DE (pmax, steps, NSIDE) to get:
                 t
-                    1D time array of lenght pmax * int(Porb/ 24hrs)*steps; 
-                    in seconds
+                    1D time array 
                 
                 d 
                     3D position and temperature array;
@@ -1041,7 +1048,7 @@ class parcel(object):
                     
                     d[:,:,2] = surface temperature array
                     
-            self.shuffle(d, Fmap_wv, pmax, steps, NSIDE) to get 
+            self.shuffle(d, Fmap_wv, NSIDE) to get 
                 
                 Fmap_wvpix
                     2D flux array rearraged so the pixels are drawn at the right spots. 
@@ -1051,27 +1058,39 @@ class parcel(object):
             
             Returns
             -------
+            If MAP = False:
+                t
+                unchanged
+                
+                d 
+                    unchanged
+                    
+                Fmap_wv 
+                    2D array[time, NPIX flux values]. outgoing flux map
+                    
+            If MAP = True:
 
-            t
-                unchanged
-                
-            d 
-                unchanged
-                
-            Fmap_wv 
-                2D array[time, NPIX flux values]. outgoing flux map 
-                
-            Fmap_wvpix 
-                2D array[time, NPIX flux values]. outgoing flux map rearraged 
-                for drawing. see shuffle() 
-                
-            Fleavingwv
-                1D array, contains  flux (wavelenght dependant) integrated over planet surface
-                at each moment in time. 
-                
-            Ftotal
-                1D array, contains flux (all wavelenghts) integrated over planet surface
-                at each moment in time. 
+                t
+                    unchanged
+                    
+                d 
+                    unchanged
+                    
+                Fmap_wv 
+                    2D array[time, NPIX flux values]. outgoing flux map 
+                    
+                Fmap_wvpix 
+                    2D array[time, NPIX flux values]. outgoing flux map rearraged 
+                    for drawing. see shuffle() 
+                    
+                Fleavingwv
+                    1D array, contains  flux (wavelenght dependant) integrated over planet surface
+                    at each moment in time. This isnt super useful because you wouldnt 
+                    be able to see all the flux coming from the planet.
+                    
+                Ftotal
+                    1D array, contains flux (all wavelenghts) integrated over planet surface
+                    at each moment in time. Again, not super useful unless you're making figures.
    
             """
        
@@ -1118,12 +1137,15 @@ class parcel(object):
 
     
     def Fobs(self, wavelenght = 8.0, PRINT = False, MAP = False):
-        """ Calculates outgoing planetary flux as seen by an observer (wavelenght dependant).
+        """ Calculates outgoing planetary flux as seen by an observer (wavelenght dependant only).
         
 
             Note
             ----
             THIS IS THE FUNCTION THAT WILL GIVE YOU THE LIGHT CURVE. 
+            
+            Remark: i don't totally trust the shuffle function. But it's only used for 
+            drawing stuff right now, the outgoing flux is calculated without it.
         
     
             Parameters
@@ -1133,12 +1155,15 @@ class parcel(object):
                 in micrometers; wavelenght to calculate the flux at. 
                 
             PRINT (bool):
-                Option to print the results to a text file. 
+                Option to print the results to a text file. Only works if MAP is also True.
+                
+            MAP (bool):
+                Option to return a bunch of stuff i use for making figures.
                 
             Calls
             -------
             
-            self.Fleaving(pmax, steps, NSIDE, wavelenght) to get :
+            self.Fleaving(wavelenght) to get :
 
                 Fmap_wv 
                     2D array[time, NPIX flux values]. outgoing flux map 
@@ -1148,7 +1173,7 @@ class parcel(object):
                     for drawing. see shuffle() 
 
                 
-            self.visibility(pmax, steps, NSIDE, d) to get:
+            self.visibility(d) to get:
                 t
                     time array in seconds
                     
@@ -1159,7 +1184,7 @@ class parcel(object):
                     2D array; [time, position (angle)] ; visibility function
 
 
-            self.shuffle(d, weight, pmax, steps, NSIDE) to get:
+            self.shuffle(d) to get:
                 
                 weightpix
                     2D array; [time, position(pixel number)] ; rearranged visibility 
@@ -1193,6 +1218,12 @@ class parcel(object):
                 1D array, contains observed flux (wavelenght dependant) integrated over planet surface
                 at each moment in time.
                 *and this one 
+                
+                if Print = TRUE:
+                    also makes a text file with all these arrays. This is actually not useful, 
+                    the thing runs fast enough that you dont need to save results. 
+                    
+                
             
             If Map = False (default)
             
@@ -1200,13 +1231,11 @@ class parcel(object):
             """
         
         #tic = time.time()
-        print ("Starting Fobs")
+        #print ("Starting Fobs")
         
         pmaxi = self.pmaxi
-        stepsi = self.stepsi
+        #stepsi = self.stepsi
         
-            
-        Nmin = int((pmaxi)*stepsi)
         
         if MAP:
         
@@ -1278,7 +1307,7 @@ class parcel(object):
         d
             3D numpy array. see DE()
         quantity
-            2D array [time, valuethat needs rearranging] 
+            2D array [time, value that needs rearranging] 
         
 
         Calls
@@ -1326,18 +1355,17 @@ class parcel(object):
     
     def findT (self):
         """ Finds numeric approximation of Max/ Min temperature on the planet.
-    
+        !!! DOES NOT WORK AS EXPECTED!!! should fix
 
         Note
         ----
+        
+        ONLY WORKS FOR CIRCULAR ORBITS.
+        
         Used for testing. Supposed to compare to the analytic approximations in 
         the functions phi-max, Tmax, Tdusk, Tdawn, to
         check that the DE is working well. Or to check that the analytic approx. 
         is working well. 
-        
-        Only works for circular orbits.
-        
-
 
         Parameters
         ----------
@@ -1400,8 +1428,9 @@ class parcel(object):
 
 
     def phi_max(self,eps):
+        
         """ Finds analytic approximation for location of  Max temperature on the planet
-        for a circular orbit.
+        for a circular orbit. Location is expressed in local stellar time.
     
 
         Note
@@ -1519,11 +1548,68 @@ class parcel(object):
         
     
 class fitter (parcel):
+    ''' Subclass of parcel class. The purpose of this is to return flux values suitable for fitting data.
+    The main difference is: it will accept an input time array and stitch it to the
+    time array that parcel generates. The input time array would be the 
+    time values that come with your observations. The DE will run for the specified number of 
+    orbital periods (default is 3) in order to reach a steady state. 
+    However, Fobs() will only return flux values that match your input time-array.
+    
+    Problem
+    ------- 
+    There is no guarantee that a steady state has indeed been reached after 3 orbital periods.
+    You have to make a figure and check. 3 or 4 periods seem to work well if the circulation efficiency isn't 
+    huge. THIS COULD BE FIXED.
+    
+    Note
+    ----
+    You can call all the parcel functions from a fitter object. 
+    However, you should only call Fobs(), i havent tested the other ones. 
+                
+    '''
+    
+
+    
     def __init__(self,parcel,ts = np.linspace(-60000,260000,num = 1000), me = 'HotWaterEarth', 
                  Teff =6000.0, Rstar = 1.0, Mstar = 1.5, Rplanet = 1.0870, a = 0.05, 
                  e = 0.1, argp = 0, 
                  A = 0, ro = 100.0 , cp = 4200.0, H= 5.0, hh = 14121.0, Porb = -1, 
                  wadv = 2, tau_rad = 20, epsilon = None, pmax = 3, steps = 300, NSIDE = 8):
+                     
+                     
+        '''
+        See parcel.__init__() for all values except ts (the time array).
+        
+            
+        Note
+        ----
+        It seems awkward to have to redefine all of the attributes of my parcel object when i
+        only want to only change one of them. It's my first time trying inheritance, so there might be a more elegant way
+        to do it. 
+        
+        Also, i had to changed self.name to self.me or there was a problem.
+        
+        Parameters
+        ----------
+        parcel parameters (see parcel.__init__())
+
+        ts (1D numpy array): 
+            time values that go with observations.
+            
+            ***Important:
+            
+            UNITS: has to be in seconds.
+        
+            TRANSIT: has to contain a transit and the transit has to occur at t=0!!! What this means is
+            that you have to fit/ guess transit time and use as an input (your time array - transit time).
+        
+            SIGN: Times before transit get negative values. Times after transit take on positive values.
+        
+        
+        t, radius, ang_vel, alpha, f (stored orbital position arrays):
+            
+            all of these arrays get recalculated to reflect the change in the time array.
+        '''
         
         self.me = me
         super(fitter, self).__init__(self, 
@@ -1533,37 +1619,47 @@ class fitter (parcel):
                  wadv = wadv, tau_rad = tau_rad, epsilon = epsilon, pmax = pmax, steps = steps, NSIDE = NSIDE)
         
         self.ts = ts
-        '''
-        t, radius, ang_vel, alpha, f = super(fitter, self).radiuss() 
-              
-        self.time = t #temporary time array we might change or not
-            
-        self.radius = radius
-        self.ang_vel = ang_vel
-        self.alpha = alpha
-        self.f = f'''
+        
         self.time = self.t
 
-        
-        #self.time = self.t
+
         self.get_time_array()
-        #self.get_time_array()
-        #self.radiussF()
+        
         t, radius, ang_vel, alpha, f = self.radiussF()
         self.radius = radius
         self.ang_vel = ang_vel
         self.alpha = alpha
         self.f = f
         
-        
-        
-        #self.times = ts
-        #self.time = np.concatenate((self.times, self.t),axis = 0) 
+
         
 
     def get_time_array(self):
         
-        '''This function is slightly wonky becaue it relies on the transit being at t = 0 to work.'''
+        '''
+        Called by __init__ to create a suitable time array.
+        Does so by stitching the default time array and the input time array together 
+        based on where the transit occurs. It defines the new altered time array and attaches 
+        it to the object as an attribute (self.t). It also defines the position of the stitching point 
+        and attaches it to the object as self.stitch_point. That point is important for slicing the 
+        outputs of the parcel functions to correspond to your time input.
+        
+        Note
+        ----
+        This function is slightly wonky. Without that if statement, it gets called twice for some reason.
+        That screws everything up. It works the way it is now, but looks weird.
+        
+        Parameters
+        ----------
+            None; just make sure you defined your object right and your 
+            time array has the righ characteristics.  See __init__ docs to
+            know what those are.
+            
+        Returns
+        -------
+            Nothing. It does however define self.t and self.stitch_point
+        
+        '''
         
         if self.time is self.t:
             
@@ -1587,15 +1683,15 @@ class fitter (parcel):
             
     def radiussF(self):
 
-        """Calculates orbital separation (between planet and its star) as a function of time
-        and saves it in __init_.
+        """Calculates orbital separation (between planet and its star) as well as other
+        orbital position quantities as a function of time. 
+        They all get attached to the object by __init_.
         Used in calculating incident flux.
 
         Note
         ----
-             Could be combined with the other functions in this section, it uses the same stuff.
-             Might want to review the Omega and w arguments that i'm passing to 
-             pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp) 
+             Exactly like the parcel.radiuss function but i had to redefine it for use in
+             recalculating the orbital positions to reflect the updated time array.
              
     
         Parameters
@@ -1607,6 +1703,7 @@ class fitter (parcel):
             
             pyasl from PyAstronomy to calculate true anomaly
             
+           
         Returns
         -------
             
@@ -1615,10 +1712,20 @@ class fitter (parcel):
                     
                 radius (1D array)
                     Same lenght as t. Orbital separation radius array (as a function of time) 
+                    
+                ang_vel (1D array)
+                    Orbital angular velocity as a function of time.
+                    
+                alpha (1D array)
+                    Phase angle as a function of time.
+                    (90-self.argp) - np.array(TA)*57.2958
+                    
+                f (1D array)
+                    Planet illuminated fraction
+                    0.5*(1-np.cos(alpha*np.pi/180.0))
 
-            """   
-        pmaxi = self.pmaxi
-        stepsi = self.stepsi
+        """   
+        
         
         ke = pyasl.KeplerEllipse(self.a, self.Porb, e=self.e, Omega=180., i=90.0, w=self.argp)
 
@@ -1639,19 +1746,27 @@ class fitter (parcel):
         alpha = (90-self.argp) - np.array(TA)*57.2958
         
         f = 0.5*(1-np.cos(alpha*np.pi/180.0))
-        #f = pyasl.lambertPhaseFunction(alpha)
         
-        
-        #self.radius = radius
-        #self.ang_vel = ang_vel
-        #self.alpha = alpha
-        #self.f = f
         return t, radius, ang_vel, alpha, f
         
     
 if __name__ == '__main__':
-    gas = parcel(tau_rad = 100, wadv = 5, pmax = 6)
-    gas2 = fitter(gas, tau_rad = 100, wadv = 5, pmax = 6)
+    
+    '''This part makes a quick figure to check that Fobs() still works and 
+    that the stitching is doing the right thing. 
+    The thicker line on the figure represents the data points that match your input times.
+    The thin line is the original output of parcel using the default times. 
+    You can also look at this figure to figure out if you've integrated long enough 
+    to reach a steady state. The amount of time it needs depends on tau_rad and wadv.
+    You can also use it to experiment with how many steps per day your 
+    DE needs to calculate and still put out a reasonably smooth line.
+    
+    PROBLEM : If you dont have enough steps (like... less then 100/24 hours), the stitching might 
+    have trouble finding a good spot to put your time values and/or the flux calculation will
+    overflow.    
+    '''
+    gas = parcel(tau_rad = 20, wadv = 5, pmax = 4, e=0.3, steps = 300)
+    gas2 = fitter(gas, tau_rad = 20, wadv = 5, pmax = 4, e= 0.3, steps = 300)
     
     gas2.get_time_array()
     
@@ -1659,6 +1774,7 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt 
     
     t,d,Fwv = gas2.Fobs()
+    Fstar, Fstarwv = gas2.Fstar()
     #plt.plot(t[::],d[::,368,2], linewidth = 3)
     #plt.plot(t[::],d[::,368,2], linewidth = 3)
     
@@ -1667,9 +1783,10 @@ if __name__ == '__main__':
     plt.plot(t[::],Fwv[::]/ max(Fwv), linewidth = 3)
     plt.plot(t[::],Fwv[::]/max(Fwv), linewidth = 3)'''
     
-    plt.plot(t,Fwv/max(Fwv), linewidth = 3)
+    plt.plot(t,Fwv/Fstarwv, linewidth = 3, label = 'fitter: flux at specified times')
     
     t,d,Fwv = gas.Fobs()
+    Fstar, Fstarwv = gas.Fstar()
     #plt.plot(t[gas2.stitch_point::],d[gas2.stitch_point::,368,2], linewidth = 3)
     #plt.plot(t[:gas2.stitch_point:],d[:gas2.stitch_point:,368,2], linewidth = 3)
     
@@ -1678,7 +1795,9 @@ if __name__ == '__main__':
     #plt.plot(t[gas2.stitch_point::],Fwv[gas2.stitch_point::]/ max(Fwv), linewidth = 3)
     #plt.plot(t[:gas2.stitch_point:],Fwv[:gas2.stitch_point:]/max(Fwv), linewidth = 3)
     
-    plt.plot(t,Fwv/max(Fwv))
+    plt.plot(t,Fwv/Fstarwv, label = 'parcel: flux at default times')
+    
+    plt.legend(loc = 4)
     
     
     
