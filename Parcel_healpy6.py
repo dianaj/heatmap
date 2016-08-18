@@ -8,29 +8,24 @@ Created on Sat Aug  6 16:21:25 2016
 """
 New in # 6
 
-gonna create a subclass called fitter. It'll take results from parcel class, 
+Created a subclass called fitter. It'll take results from parcel class, 
 stitch together the input time array with 1 period of the parcel time array and 
-calculate value for just that one period. Hopefully it'll depend only on time, tau_rad and 
-wadv. It'll be quicker... and not return any maps and crap. 
+calculate values for just that one period. It depends only on time, tau_rad and 
+wadv. It's quicker... and doesn't return any maps and crap. 
 
 - I removed the unfinished countour shit. I can find them in #5 if i need to finish them and add them later.
-"""
-"""
- 
-Example
--------
 
-.. _NumPy Documentation HOWTO:
-   https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt
+- You have to define your fitter object in an awkward way. see fitter.__init__()
+
+"""
+"""
+
 
 TO DO
 -----
 
 - make sure this works for negative wadv 
-- especially check SOP, SSP, coordinates, illum, visibility and DE
 
-- Try to get Temperatures to not start at 0. 
-        They should start somewhere good... based on taurad and wadv and T0
         
 
 - include TESTs for most functions that are easy to run. 
@@ -38,8 +33,11 @@ TO DO
         draw what it does. 
         
         
--  NEED A GET ITEM METHOD SO WE CAN CHANGE VALUES IN AN OBJECT WITHOUT CHANGING THE WHOLE THING
+-  NEED A GET ITEM METHOD SO WE CAN CHANGE VALUES IN AN OBJECT WITHOUT CHANGING THE WHOLE THING. 
+Right ow you can change a value but you have to do the conversions that __init__usually makes by hand. 
+Like change ours to seconds or things like that.
 """
+
 """
 This module contains 2 classes. 
 
@@ -47,7 +45,7 @@ This module contains 2 classes.
 phase curve for an arbitrary number of orbits (default is 3).  
 
 -fitter is  a subclass of parcel. It takes an arbitrary time array and a parcel object as input 
-and stitches it to the defaults 'parcel' time 
+and stitches it to the default 'parcel' time 
 array. It then outputs a planetary phase curve for only the time values in your time array. 
 It can be used for fitting for parameters tau_rad and wadv"""
 
@@ -933,7 +931,7 @@ class parcel(object):
             
             d, Fweight = self.illum() 
             
-
+            
             if self.e == 0.0:
                 
                     
@@ -944,13 +942,14 @@ class parcel(object):
                     else:
                         'changed this to work with arbitrary time'
                         #deltaphi = (2*np.pi/stepsi) * self.wadv/(2*np.pi/self.P) #(i don't think wadv is important in this case)
-                        deltaphi = d[1::,:,1]-d[0:-1:,:,1]
+                        deltaphi = np.abs(((d[1::,:,1]-d[0:-1:,:,1]))%(-2*np.pi))
+
                         
                         for i in range(1,len(t)):#phis.shape[2]
                         
                             #incoming flux is always the same for a circular orbit F(t)/Fmax = 1
                             
-                            dT =1.0/self.epsilon*(Fweight[i-1]-(d[i-1,:,2])**4 )*deltaphi[i-1] #calculate change
+                            dT =1.0/self.epsilon*(Fweight[i-1]-(d[i-1,:,2])**4 )*(deltaphi[i-1,:]) #calculate change
                             
                             d[i,:,2]= d[i-1,:,2]+ dT #update temperature array
                         
@@ -979,7 +978,7 @@ class parcel(object):
                     #F = ((self.a*(1-self.e)/self.radius(pmax, steps)[1])**2)
                     
                     if (self.epsilon <= 0.0001) or (self.tau_rad <= 0.0001):
-                        'this branch doesnt work dont use it!'
+                        
                         d[:,:,2] = (((1-self.A)*F)/self.sigmaB)**(0.25)
                 
                     else:
@@ -1136,7 +1135,7 @@ class parcel(object):
             return t, d, Fmap_wv
 
     
-    def Fobs(self, wavelenght = 8.0, PRINT = False, MAP = False):
+    def Fobs(self, wavelenght = 8.0, PRINT = False, MAP = False, BOLO = False):
         """ Calculates outgoing planetary flux as seen by an observer (wavelenght dependant only).
         
 
@@ -1282,6 +1281,13 @@ class parcel(object):
             #weight = self.weight
             Fmapwvobs = Fmap_wv*weight
             Fwv = np.sum(Fmapwvobs, axis = 1)
+            
+            if BOLO:
+                dA = hp.nside2pixarea(self.NSIDE)*self.Rplanet**2
+                Ftotal_ = (self.sigmaB * (d[:,:,2]*self.T0)**4)*dA
+                Fmap_total = Ftotal_*weight
+                Ft = np.sum(Fmap_total, axis = 1)
+                return t, d, Ft
             
 
                 
@@ -1765,8 +1771,9 @@ if __name__ == '__main__':
     have trouble finding a good spot to put your time values and/or the flux calculation will
     overflow.    
     '''
-    gas = parcel(tau_rad = 20, wadv = 5, pmax = 4, e=0.3, steps = 300)
-    gas2 = fitter(gas, tau_rad = 20, wadv = 5, pmax = 4, e= 0.3, steps = 300)
+    
+    gas = parcel(tau_rad = 10, wadv = 5, pmax = 4, e=0.3, steps = 300)
+    gas2 = fitter(gas, tau_rad = 10, wadv = 5, pmax = 4, e= 0.3, steps = 300)
     
     gas2.get_time_array()
     
@@ -1800,6 +1807,15 @@ if __name__ == '__main__':
     plt.legend(loc = 4)
     
     
+    '''
+    gas = parcel(name = "HD189733b",Teff = 5938, e=0,Porb = 2.21, a = 0.031, wadv = 11.0, 
+                          epsilon = 6, argp = 90, Rstar = 0.781, Mstar = 0.846,
+                          Rplanet = 0.838, pmax = 10, steps = 300, NSIDE = 8 )      
+    
+    t, d, Fwv = gas.Fobs(BOLO = False)
+    import matplotlib.pyplot as plt 
+    plt.plot(t,Fwv)
+    '''
     
     
     #gas2.print_stuff()

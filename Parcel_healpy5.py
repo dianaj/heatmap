@@ -106,7 +106,7 @@ class parcel:
     def __init__(self, name = 'HotWaterEarth', Teff =6000.0, Rstar = 1.0, Mstar = 1.5, Rplanet = 1.0870, a = 0.05, 
                  e = 0.1, argp = 0, 
                  A = 0, ro = 100.0 , cp = 4200.0, H= 5.0, hh = 14121.0, Porb = -1, 
-                 wadv = 1.2, tau_rad = 20, epsilon = None, pmax = 3, steps = 300, NSIDE = 8):
+                 wadv = 2, tau_rad = 20, epsilon = None, pmax = 3, steps = 300, NSIDE = 8):
         
         """The __init__ method allows to set attributes unique to each parcel instance.
         It takes some parameters in the units specified in the docstring. Some are 
@@ -171,7 +171,17 @@ class parcel:
             
             multiple of wmax (ex: 2 or 0.5)
             wrot = (2*Pi/P) is chosen to match wmax (orbital angular velocity at periastron );
-            wadv is expressed as a multiple of wmax, with ( - ) meaning a rotation in the oposite direction.            
+            wadv is expressed as a multiple of wmax, with ( - ) meaning a rotation in the oposite direction.
+
+            PROBLEM/ REMARK: 
+                in the circular case: if wadv = 1 it means the gas isnt moving wrt the substellar point. 
+                Every parcel of gas has the same temperature it started with always 
+                (might heat up a bit and stay there)
+                
+                if wadv = 2 it means that it takes 1 rotaions of the planet for the gas to leave the Substellar point 
+                and come back (go through all its temperatures)
+                
+                
             
         T0 : not used in calculations
             Initial temperature of gas at substellar point at periastron. 
@@ -209,7 +219,24 @@ class parcel:
                 number of pixels that will subdivide the planet surface ;
                 NPIX = 12* NSIDE**2.
                 (ex: 192 pixels --> NSIDE = 4; 798 pixels --> NSIDE = 8)
-
+                
+                
+        Precalculated quantities that get attached to the object
+        --------------------------------------------------------
+        
+        t -time array (1D)
+                
+        radius(t) -orbital separation array
+        
+        ang_vel(t) - orbital angular velocity array
+        
+        alpha(t) - phase angle array
+        
+        f(t) - illuminted fraction array
+        
+        phis, thetas - initial pixel coordinates
+        
+        
         """
 
         self.name = name    # instance variable unique to each instance
@@ -254,14 +281,16 @@ class parcel:
         
         
         #PRE-CALCULATED FUNCTIONS 
-        self.rotationsPerOrbit = int(self.Porb/self.P)+1 #used for giving the default time lenght for DE
-        self.rotationsPerDay = int(self.P/self.days)+1 #used for giving the default precision for DE
+        self.rotationsPerOrbit = np.ceil(max(self.Porb/self.P,1)) #used for giving the default time lenght for DE
+        self.rotationsPerDay = int(max(self.P/self.days,1)) #used for giving the default precision for DE
         self.pmax = pmax
         self.steps = steps
-        self.pmaxi = self.pmax * self.rotationsPerOrbit
-        self.stepsi = self.steps * self.rotationsPerDay
+        self.pmaxi = self.pmax * self.rotationsPerOrbit #number of rotational periods we will integrate for 
+        self.stepsi = self.steps * self.rotationsPerDay #steps per rotational period 
         t, radius, ang_vel, alpha, f = self.radius()
         self.t = t
+
+            
         self.radius = radius
         self.ang_vel = ang_vel
         self.alpha = alpha
@@ -568,11 +597,12 @@ class parcel:
         for i in range(1,int(pmaxi*stepsi)):  
             zt[i]= zt[i-1]+self.ang_vel[i-1]*deltat
         
-        SSP =(zt-((self.wadv)*t -((self.wadv*t)/(2*np.pi)).astype(int)*2*np.pi)-
-        (t/self.Porb).astype(int)*2*np.pi)
+        #added the mod 2pi removed the rest of the trying to mod out by pi stuff
+        SSP =(zt-((self.wadv)*t))%(2*np.pi)# -((self.wadv*t)/(2*np.pi)).astype(int)*2*np.pi)-
+        #(t/self.Porb).astype(int)*2*np.pi)
         
         SOP = (((-self.alpha[0]+180)*np.pi/180)-
-                ((self.wadv)*t -((self.wadv*t)/(2*np.pi)).astype(int)*2*np.pi))
+                ((self.wadv)*t)%(2*np.pi))#-((self.wadv*t)/(2*np.pi)).astype(int)*2*np.pi))
         #SOP = SSP + ((-alpha+180)*np.pi/180)
         return t, zt, SSP, SOP
     
@@ -644,22 +674,16 @@ class parcel:
         #tmax = self.P*pmaxi
         t = self.t
         
-        #in case you want the time in planet days        
-        """THIS CAN GO IN THE __INIT__  
-        #POSITIONS
-        coords =np.empty(((hp.nside2npix(self.NSIDE)),2))
-        for i in range(hp.nside2npix(self.NSIDE)):
-            coords[i,:]=(np.array(hp.pix2ang(self.NSIDE, i)))
-        phis = coords[:,1]
-        thetas = coords[:,0]    
-        """
-        """THIS NEEDS TO STAY HERE""" 
         
-        phis = self.phis.copy()
-        thetas = self.thetas.copy()
+        phis = self.phis#.copy()
+        thetas = self.thetas#.copy()
         #STARTING TEMPERATURES
-        T = (np.sin(thetas)**0.25)*(np.cos(phis)+np.abs(np.cos(phis)))/2
-        T[np.where(T<0.01)]=0.01 
+        if self.epsilon >= 20:
+            T = 0.75*(np.sin(thetas)**0.25)*(np.cos(phis)+np.abs(np.cos(phis)))/2
+            T[np.where(T<0.05)]=0.05
+        else:
+            T = (np.sin(thetas)**0.25)*(np.cos(phis)+np.abs(np.cos(phis)))/2
+            T[np.where(T<0.05)]=0.05 
         
         #3D ARRAY TO CONTAIN EVERYTHING. CALLED IT d   
         c= np.array(zip(thetas,phis,T)).reshape(-1,hp.nside2npix(self.NSIDE),3)
@@ -669,14 +693,20 @@ class parcel:
         
         #CREATE THE COORDINATE ARRAY. THERE'S 2 CASES: CIRCULAR ORBIT AND ECCENTRIC ORBIT    
         if self.e == 0.0:
-                
-            deltaphi = (2*np.pi/stepsi)* self.wadv/(2*np.pi/self.P)
-            d[:,:,1]= (phis+deltaphi* np.array(range(0,Nmin)).reshape(-1,1))%(2*np.pi) #-((self.wadv)*t[i] - int(self.wadv*t[i])) #update location of gas parcel
+            t, zt, SSP, SOP = self.SSP()     
+            deltaphi = (2*np.pi/self.stepsi)* self.wadv/(2*np.pi/self.P)
+            d[:,:,1]= (phis)+(SSP.reshape(-1,1))*(np.sign(self.wadv))
+            #+(deltaphi* np.array(range(0,Nmin)).reshape(-1,1)))%(2*np.pi) 
+            #-((self.wadv)*t[i] - int(self.wadv*t[i])) #update location of gas parcel
                     
-            
+           
         else:
+            deltaphi = (2*np.pi/stepsi)* self.wadv/(2*np.pi/self.P)
             t, zt, SSP, SOP = self.SSP()
+            #d[:,:,1]= (phis)+ ((zt.reshape(-1,1))*(np.sign(self.wadv)))%(2*np.pi)            
+            
             d[:,:,1]= (phis)+ (SSP.reshape(-1,1))*(np.sign(self.wadv))
+            #+deltaphi* np.array(range(0,Nmin)).reshape(-1,1))%(2*np.pi) #added this to the mix
 
 
         #ILLUMINATION WEIGHT FUNCTION. WILL GET PASSED TO DE ALONG WITH D THE COORDINATE MATRIX AND THE STUPID TIME MATRIX
@@ -852,46 +882,70 @@ class parcel:
             #Fweight  =self.Fweight
             
             d, Fweight = self.illum() 
+            
+
             if self.e == 0.0:
                 
-                deltaphi = (2*np.pi/stepsi)* self.wadv/(2*np.pi/self.P)
-                
-                for i in range(1,len(t)):#phis.shape[2]
                     
-                    dT =(1.0/self.epsilon*Fweight[i-1]-(d[i-1,:,2])**4 )*deltaphi #calculate change
-
-                    d[i,:,2]= d[i-1,:,2].copy()+ dT #update temperature array
+                    if (self.epsilon <= 0.0001) or (self.tau_rad <= 0.0001):
+                        
+                        #d[:,:,2] = (((1-self.A)*Fweight)/self.sigmaB)**(0.25)
+                        d[:,:,2] = (((1-self.A)*Fweight))**(0.25)
+                    else:
                     
-                #toc = time.time()
-                #print ("Time this took is: " , str(toc-tic), "seconds")
+                        deltaphi = (2*np.pi/stepsi) * self.wadv/(2*np.pi/self.P) #(i don't think wadv is important in this case)
+                        
+                        
+                        for i in range(1,len(t)):#phis.shape[2]
+                        
+                            #incoming flux is always the same for a circular orbit F(t)/Fmax = 1
+                            
+                            dT =1.0/self.epsilon*(Fweight[i-1]-(d[i-1,:,2])**4 )*deltaphi #calculate change
+                            
+                            d[i,:,2]= d[i-1,:,2].copy()+ dT #update temperature array
+                        
+                        
+                    #toc = time.time()
+                    #print ("Time this took is: " , str(toc-tic), "seconds")
+                    
+                    return t, d
                 
-                return t, d
-            
+                
+                    
+                 
+                
             else:
-                
-                deltat = self.P/stepsi
-                
-                deltat_ = deltat/self.tau_rad
-                wrot = (2*np.pi/self.P)* self.wadv/(2*np.pi/self.P)                   
-                deltaphi = wrot*deltat 
                     
-                #parcel.sigmaB*self.Teff**4*(self.Rstar/np.array(self.radius(pmax,steps)[1]))**2    
-                'normalized flux -- (minimum radius/ radius(t))**2'   
-                Fstar = (self.Finc().reshape(-1,1)) #*Fweight
-             
-                F = Fstar/(parcel.sigmaB*self.Teff**4*(self.Rstar/(self.a*(1-self.e)))**2)*Fweight
-                #F = ((self.a*(1-self.e)/self.radius(pmax, steps)[1])**2)
-               
-                for i in range(1,len(t)):
                         
-                        
-                        dT =(( F[i-1] - (d[i-1,:,2])**4 )* (deltat_))
-                        
-                        d[i,:,2]= d[i-1,:,2].copy()+dT #update temperature array
-                        
-                        
+                    #parcel.sigmaB*self.Teff**4*(self.Rstar/np.array(self.radius(pmax,steps)[1]))**2    
+                    'normalized flux -- (minimum radius/ radius(t))**2'   
+                    Fstar = (self.Finc().reshape(-1,1)) #*Fweight
+                 
+                    F = Fstar/(parcel.sigmaB*self.Teff**4*(self.Rstar/(self.a*(1-self.e)))**2)*Fweight
+                    #F = ((self.a*(1-self.e)/self.radius(pmax, steps)[1])**2)
+                    
+                    if (self.epsilon <= 0.0001) or (self.tau_rad <= 0.0001):
+                        'this branch doesnt work dont use it!'
+                        d[:,:,2] = (((1-self.A)*F)/self.sigmaB)**(0.25)
                 
-                return t, d 
+                    else:
+                        #this will have to be changed for use in fitting
+                        deltat = self.P/stepsi
+                        
+                        deltat_ = deltat/self.tau_rad
+                        wrot = (2*np.pi/self.P)* self.wadv/(2*np.pi/self.P)                   
+                        deltaphi = wrot*deltat 
+                    
+                        for i in range(1,len(t)):
+                                
+                                
+                                dT =(( F[i-1] - (d[i-1,:,2])**4 )* (deltat_))
+                                
+                                d[i,:,2]= d[i-1,:,2].copy()+dT #update temperature array
+                            
+                            
+                    
+                    return t, d 
 
     
     def Fleaving(self, wavelenght = 8.0, MAP = False):#, TEST = False):
@@ -1009,7 +1063,7 @@ class parcel:
             return t, d, Fmap_wv
 
     
-    def Fobs(self, wavelenght = 8.0, PRINT = False, MAP = False):
+    def Fobs(self, wavelenght = 8.0, PRINT = False, MAP = False, BOLO = False):
         """ Calculates outgoing planetary flux as seen by an observer (wavelenght dependant).
         
 
@@ -1060,7 +1114,7 @@ class parcel:
    
             Returns
             -------
-            
+            If MAP = True:
             t, d, Fmapwvobs, weight, weightpix, Fwv
 
             t
@@ -1085,7 +1139,10 @@ class parcel:
                 1D array, contains observed flux (wavelenght dependant) integrated over planet surface
                 at each moment in time.
                 *and this one 
-   
+            
+            If Map = False (default)
+            
+            t, d, Fwv
             """
         
         #tic = time.time()
@@ -1140,6 +1197,12 @@ class parcel:
             t, d, Fmap_wv = self.Fleaving(wavelenght)
             weight = self.visibility(d)
             #weight = self.weight
+            if BOLO:
+                dA = hp.nside2pixarea(self.NSIDE)*self.Rplanet**2
+                Ftotal_ = (self.sigmaB * (d[:,:,2]*self.T0)**4)*dA
+                Fmap_total = Ftotal_*weight
+                Ft = np.sum(Fmap_total, axis = 1)
+                return t, d, Ft
             Fmapwvobs = Fmap_wv*weight
             Fwv = np.sum(Fmapwvobs, axis = 1)
             
@@ -1226,8 +1289,7 @@ class parcel:
         
         Only works for circular orbits.
         
-        THIS WORKS WITH THE OLD VERSION. HAVE TO UPDATE COORDINATES BEFORE 
-        TRYING TO USE IT AGAIN. 
+
 
         Parameters
         ----------
@@ -1236,7 +1298,7 @@ class parcel:
         Calls
         -------
         
-        self.DE(pmax, steps, NSIDE), the 0 eccentricity branch.
+        self.DE(), the 0 eccentricity branch.
 
 
    
@@ -1260,27 +1322,24 @@ class parcel:
         pmaxi = self.pmaxi
         stepsi = self.stepsi
         
-        t, d = self.DE()
+        t,d = self.DE()
         
         
-        deltaphi = 2.0*np.pi/stepsi
-        Tmax = np.max(d[int(stepsi*(pmaxi-2))::,:,2])
+        #deltaphi = 2.0*np.pi/stepsi
+        Tmax = np.max(np.max(d[int(self.stepsi*(self.pmaxi-1))::,:,2],axis =1))
+        #Tmax = np.max(d[int(stepsi*(pmaxi-2))::,:,2])
         
             
-        for i in range(int(stepsi*(pmaxi-2)), int(stepsi*pmaxi)):
+        #for i in range(int(stepsi*(pmaxi-2)), int(stepsi*pmaxi)):
             
             
             
                 #if deltaphi >= np.abs(1.5*np.pi - (d[i,np.where(np.abs(d[i,:,0]-0.5*np.pi))< 0.1, np.where(np.abs(d[i,:,1]-1.5*np.pi))< 0.1]):
                     #print np.abs(1.5 - phi[i])*np.pi, 'dawn difference' 
                     #Tdawn = T[i]
-                Tdawn = (d[i,np.where((0 <(d[i,:,0]-0.5*np.pi)) & ((d[i,:,0]-0.5*np.pi)< 0.4) 
-                            & (np.abs(d[i,:,1]-(1.5)*np.pi)< 2*deltaphi)), 
-                           2])
+        Tdawn = (d[int(stepsi*(pmaxi-1)),hp.ang2pix(self.NSIDE, np.pi/2, -np.pi/2),2])
                 
-                Tdusk = (d[i,np.where((0 <(d[i,:,0]-0.5*np.pi)) & ((d[i,:,0]-0.5*np.pi)< 0.4) 
-                            & (np.abs(d[i,:,1]-(0.5)*np.pi)< 2*deltaphi)), 
-                           2])
+        Tdusk = (d[int(stepsi*(pmaxi-1)),hp.ang2pix(self.NSIDE, np.pi/2, np.pi/2),2])
 
                 
                 #if deltaphi >= np.abs(2.5 - (phi[i]-2*(pmaxi-2))):
@@ -1408,7 +1467,9 @@ class parcel:
         """
             
         f = (np.pi + (3*np.pi/eps)**(4.0/3.0))**(-0.25)
-        return f    
+        return f  
+        
+
 
         
 """NOT FINISHED
