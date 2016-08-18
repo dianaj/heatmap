@@ -4,10 +4,7 @@ Created on Mon Jun 27 10:57:34 2016
 
 @author: diana
 """
-""" THIS IS A FILE FOR TESTING THE RADIUS, ANGULAR VELOCITY, AND SSP SOP CALCULATIONS
-
-            THE RADIUS DEFINITION MIGHT NEED TO BE CHANGED SO IT QUITS STARTING AT PERIASTRON
-            BUT I THINK WE GOT BIGGER PROBLEMS """
+""" THIS IS A FILE FOR TESTING THE RADIUS, ANGULAR VELOCITY, AND SSP SOP CALCULATIONS"""
 
 # In[10]:
 
@@ -16,22 +13,24 @@ import matplotlib.pyplot as plt
 #from scipy import integrate
 #from PyAstronomy import pyasl
 import healpy as hp
-from Parcel_healpy4 import parcel as p
+from Parcel_healpy6 import parcel as p
 
-
-# In[11]:
-
-hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1.0/2, 
-                  tau_rad = 20 , argp = 121.71, Rstar = 1.5, Mstar = 1.275)
 
 
 # In[12]:
+gas = p(name = "HD189733b",Teff = 4938, e=0,Porb = 2.21, a = 0.031, epsilon = 1, 
+                      argp = 90, Rstar = 0.781, Mstar = 0.846,
+                      Rplanet = 1.138, wadv = 2 )
+                      
+gas2 = p(name = "HD189733b",Teff = 4938, e=0.00001,Porb = 2.21, a = 0.031,  
+                      epsilon=1,  argp = 90, Rstar = 0.781, Mstar = 0.846,
+                      Rplanet = 1.138 )                      
+alpha = gas.alpha
+f =  gas.f
 
-t, alpha, f = hd.f_ratio(pmax =3)
-t, zt, SSP, SSO = hd.SSP(pmax = 3)
+t, zt, SSP, SOP = gas.SSP()
 
-
-t, d, coordsSOP, weight = hd.visibility(pmax = 3, TEST = True)
+d, coordsSOP, weight = gas.visibility(TEST = True)
 
 coordsSSP = d[:,:,1]
 
@@ -39,49 +38,108 @@ coordsSSP = d[:,:,1]
 
 '''THERE's SOME KINKS IN THIS ONE'''
 
-fig, ax = plt.subplots(3,  figsize = (18,24))
+fig, ax = plt.subplots(3,  figsize = (8,24))
 
-ax[0].set_title("HD ~3 orbital periods, 20 rotations")
-ax[0].plot(t, SSP, label = 'SubStelar angle')
-ax[0].plot(t,SSO, label = 'SubObs angle')
-ax[0].set_xlabel('Time(seconds)', fontsize = 16)
-ax[0].set_ylabel('Angle ( rads)', fontsize = 16)
-ax[0].plot(t,(-alpha+180)/57.29, label = "Alpha the phase angle")
+ax[0].set_title(gas.name+" $w_{adv} = $"+ '%1.1f'%(gas.wadv/(2*np.pi/gas.P)))
+ax[0].plot(t/gas.P, SSP, label = 'SubStelar angle', linewidth = 2)
+ax[0].plot(t/gas.P,SOP, label = 'SubObs angle',linewidth = 2)
+ax[0].set_xlabel('Time(rotational periods)', fontsize = 14)
+ax[0].set_ylabel('Angle ( rads)', fontsize = 14)
+ax[0].plot(t/gas.P,(-alpha+180)/57.29, label = "Alpha the phase angle",linewidth = 2, alpha = 0.6)
 ax[0].legend(fontsize = 8)
 
-ax[1].set_title("ZOOM")
+ax[1].set_title("Coordinates")
 #ax[1].plot(t, SSP, label = 'SubStelar angle')
 #ax[1].plot(t,SSO, label = 'SubObs angle')
-ax[1].plot(t/hd.P,d[:,360,1], label = 'parcel location rel. to SSP ')
-ax[1].plot(t/hd.P,coordsSOP[:,360], label = 'parcel location rel to SOP')
-ax[1].set_xlabel('Time(seconds)', fontsize = 16)
-ax[1].set_ylabel('Angle ( rads)', fontsize = 16)
+ax[1].plot(t/gas.P,d[:,360,1], label = 'parcel location rel. to SSP ',  linewidth = 2)
+ax[1].plot(t/gas.P,coordsSOP[:,360], label = 'parcel location rel to SOP', linewidth = 2)
+ax[1].set_xlabel('Time(rotational periods)', fontsize = 14)
+ax[1].set_ylabel('Angle ( rads)', fontsize = 14)
 ax[1].legend(fontsize = 8)
 #ax[1].plot(t,(-alpha+180)/57.29, label = "Alpha the phase angle")
-ax[1].set_xlim(10,18)
+#ax[1].set_xlim(10,20)
 #ax[1].set_ylim(-6,0)
 
 ax[2].set_title("Difference")
-ax[2].plot(t, SSO-SSP, label = 'SOP - SSP')
-ax[2].plot(t,-coordsSOP[:,360]+coordsSSP[:,360], label = 'coordsSOP - coordsSSP')
+ax[2].plot(t/gas.P, SOP-SSP, label = 'SOP - SSP', linewidth = 2)
+ax[2].plot(t/gas.P,-coordsSOP[:,360]+coordsSSP[:,360], label = 'coordsSSP - coordsSOP', linewidth = 2)
 #ax[2].plot(t,SSO, label = 'SubObs angle')
-ax[2].set_xlabel('Time(seconds)', fontsize = 16)
-ax[2].set_ylabel('Angle ( rads)', fontsize = 16)
-ax[2].plot(t,(-alpha+180)/57.29, label = "Alpha the phase angle")
-ax[2].plot(t,f, label = "f_ratio")
+ax[2].set_xlabel('Time(rotational periods)', fontsize = 14)
+ax[2].set_ylabel('Angle ( rads)', fontsize = 14)
+ax[2].plot(t/gas.P,(-alpha+180)/57.29, label = "Alpha the phase angle" , linewidth = 2, alpha = 0.6)
+ax[2].plot(t/gas.P,f*5, label = "f_ratio * 5", linestyle = '--', linewidth = 2)
 ax[2].legend(fontsize = 8)
-ax[2].set_xlim(0,4000000)
+#ax[2].set_xlim(0,4000000)
 #plt.plot(t,weight[:,[200,300]])
 #plt.xlim(0,2000000)
 #plt.ylim(-1,1)
 #plt.plot(t, ang_vel)
 fig.tight_layout()
-fig.savefig("SSP and SSO")
+fig.savefig("SSP and SSO_circ.pdf")
+
+
+# In[11]:
+
+hd = p(name = "HD17156b", Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 0.5, 
+                  tau_rad = 20 , argp = 121.71, Rstar = 1.5, Mstar = 1.275)
 
 
 # In[12]:
 
-"""Let's figure out how the radius calculation works """
+alpha = hd.alpha
+f =  hd.f
+
+t, zt, SSP, SOP = hd.SSP()
+
+d, coordsSOP, weight = hd.visibility(TEST = True)
+
+coordsSSP = d[:,:,1]
+
+fig, ax = plt.subplots(3,  figsize = (8,24))
+
+ax[0].set_title(hd.name+" $w_{adv} = $"+ '%1.1f'%(hd.wadv/(2*np.pi/hd.P)))#'%1.1f'%gas.wadv)
+ax[0].plot(t/hd.P, SSP, label = 'SubStelar angle', linewidth = 2)
+ax[0].plot(t/hd.P,SOP, label = 'SubObs angle',linewidth = 2)
+ax[0].set_xlabel('Time(rotational periods)', fontsize = 14)
+ax[0].set_ylabel('Angle ( rads)', fontsize = 14)
+ax[0].plot(t/hd.P,(-alpha+180)/57.29, label = "Alpha the phase angle",linewidth = 2, alpha = 0.6)
+ax[0].set_xlim(0,22)
+ax[0].legend(fontsize = 8)
+
+ax[1].set_title("Coordinates")
+#ax[1].plot(t, SSP, label = 'SubStelar angle')
+#ax[1].plot(t,SSO, label = 'SubObs angle')
+ax[1].plot(t/hd.P,d[:,360,1], label = 'parcel location rel. to SSP ',  linewidth = 2)
+ax[1].plot(t/hd.P,coordsSOP[:,360], label = 'parcel location rel to SOP', linewidth = 2)
+ax[1].set_xlabel('Time(rotational periods)', fontsize = 14)
+ax[1].set_ylabel('Angle ( rads)', fontsize = 14)
+ax[1].set_xlim(0,22)
+ax[1].legend(fontsize = 8)
+#ax[1].plot(t,(-alpha+180)/57.29, label = "Alpha the phase angle")
+#ax[1].set_xlim(10,20)
+#ax[1].set_ylim(-6,0)
+
+ax[2].set_title("Difference")
+ax[2].plot(t/hd.P, SOP-SSP, label = 'SOP - SSP', linewidth = 2)
+ax[2].plot(t/hd.P,-coordsSOP[:,360]+coordsSSP[:,360], label = 'coordsSSP - coordsSOP', linewidth = 2)
+#ax[2].plot(t,SSO, label = 'SubObs angle')
+ax[2].set_xlabel('Time(rotational periods)', fontsize = 14)
+ax[2].set_ylabel('Angle ( rads)', fontsize = 14)
+ax[2].plot(t/hd.P,(-alpha+180)/57.29, label = "Alpha the phase angle" , linewidth = 2, alpha = 0.6)
+ax[2].plot(t/hd.P,f*5, label = "f_ratio * 5", linestyle = '--', linewidth = 2)
+ax[2].set_xlim(0,22)
+ax[2].legend(fontsize = 8)
+#ax[2].set_xlim(0,4000000)
+#plt.plot(t,weight[:,[200,300]])
+#plt.xlim(0,2000000)
+#plt.ylim(-1,1)
+#plt.plot(t, ang_vel)
+fig.tight_layout()
+fig.savefig("SSP and SSO.pdf")
+
+# In[12]
+
+"""Figure that shows how the radius calculation works, angular velocity calculation works using pyasl """
 #from __future__ import print_function, division
 #import numpy as np
 from PyAstronomy import pyasl
@@ -205,7 +263,6 @@ ax[2,1].plot(t, pyasl.lambertPhaseFunction(alpha), ls ='None', marker ='o')
 ax[2,1].plot(t, 0.5*(1+np.cos(alpha/57.2958)),ls ='None', marker ='o')
 plt.tight_layout()
 fig.savefig('radius (t)')
-
 
 
 # In[12]:

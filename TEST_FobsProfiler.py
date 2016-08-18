@@ -11,7 +11,8 @@ import matplotlib.pyplot as plt
 #from scipy import integrate
 #from PyAstronomy import pyasl
 import healpy as hp
-from Parcel_healpy5 import parcel as p
+from Parcel_healpy6 import parcel as p
+from Parcel_healpy6 import fitter as fit
 from timer import Timer
 
 
@@ -20,7 +21,15 @@ from timer import Timer
 
 x0 = p(name = "XO-3b",Teff = 6781, e=0.26, Porb = 3.19, a = 0.0454, wadv = 1.0/2, 
                   tau_rad = 20, argp = 346, Rstar = 1.49, Mstar = 1.41, 
-                  Rplanet = 1.217, pmax = 4, NSIDE = 4)
+                  Rplanet = 1.217, pmax = 3, NSIDE = 8, steps = 100)
+                  
+x0f = fit(x0, ts = np.linspace(-160000,460000,num = 1500),
+          me = "XO-3b",Teff = 6781, e=0.26, Porb = 3.19, a = 0.0454, wadv = 1.0/2, 
+                  tau_rad = 20, argp = 346, Rstar = 1.49, Mstar = 1.41, 
+                  Rplanet = 1.217, pmax = 3, NSIDE = 8, steps = 100)
+
+# In[11]:
+
 import cProfile
 
 def do_cprofile(func):
@@ -40,7 +49,7 @@ def do_cprofile(func):
 @do_cprofile
 def expensive_function():
     
-    return x0.Fobs()
+    return x0f.Fobs()
 
 # perform profiling
 result = expensive_function()
@@ -70,62 +79,8 @@ print "=> elasped DE: %s s" % t.secs
 
 # In[11]:
 
-"""
-try:
-    from line_profiler import LineProfiler
-
-    def do_profile(follow=[]):
-        def inner(func):
-            def profiled_func(*args, **kwargs):
-                try:
-                    profiler = LineProfiler()
-                    profiler.add_function(func)
-                    for f in follow:
-                        profiler.add_function(f)
-                    profiler.enable_by_count()
-                    return func(*args, **kwargs)
-                finally:
-                    profiler.print_stats()
-            return profiled_func
-        return inner
-
-except ImportError:
-    def do_profile(follow=[]):
-        "Helpful if you accidentally leave in production!"
-        def inner(func):
-            def nothing(*args, **kwargs):
-                return func(*args, **kwargs)
-            return nothing
-        return inner
-
-def get_number():
-    for x in xrange(5000000):
-        yield x
-
-@do_profile(follow=[])
-def expensive_function():
-    
-    return hd.Fobs()
-
-result = expensive_function()
-
-# In[12]:
-class SomeClass(object):
-
-    def __setattr__(self, name, value):
-        print(name, value)
-        self.__dict__[name] = value*12
-
-    def __init__(self, attr1, attr2):
-        self.attr1 = attr1
-        self.attr2 = attr2
 
 
-sc = SomeClass(attr1=1, attr2=2)
-
-sc.attr1 = 3
-
-#plt.plot(t,TA)"""
 # In[12]:                
 
  

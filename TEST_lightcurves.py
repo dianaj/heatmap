@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 #from scipy import integrate
 #from PyAstronomy import pyasl
 import healpy as hp
-from Parcel_healpy4 import parcel as p
-from timer import Timer
+from Parcel_healpy6 import parcel as p
+from Parcel_healpy6 import fitter as fit
+#from timer import Timer
 
 
 
@@ -23,7 +24,7 @@ from timer import Timer
                   
 
 # In[11]:
-
+"""
 hd = p(Teff = 6079, e=0.6768,Porb = 21.2, a = 0.1589, wadv = 1.0/2, 
                   epsilon = 1, argp = 121.71, Rstar = 1.5, Mstar = 1.275)
 Fstar, Fstarwv = hd.Fstar()
@@ -65,7 +66,7 @@ ax[3, 1].set_xlabel('Time (s)')
 plt.subplots_adjust(wspace = 0.2)
 fig.savefig("Fluxtries.pdf")
 
-
+"""
 
 # In[12]:
 
@@ -85,14 +86,14 @@ GI436b = p(name = "GI436b",Teff = 3684, e=0.15, Porb = 2.64, a = 0.02887, wadv =
 
 XO_3b = p(name = "XO-3b",Teff = 6781, e=0.26, Porb = 3.19, a = 0.0454, wadv = 1.0/2, 
                   tau_rad = 20, argp = 346, Rstar = 1.49, Mstar = 1.41, 
-                  Rplanet = 1.217)
+                  Rplanet = 1.217, steps = 100)
 
 HAT_P_11b = p(name = "HAT_P_11b",Teff = 4780, e=0.198, Porb = 4.8878, a = 0.053, wadv = 1.0/2, 
-                  tau_rad = 20, argp = 355.2, Rstar = 0.75, Mstar = 0.81, 
+                  tau_rad = 20, argp = 355, Rstar = 0.75, Mstar = 0.81, 
                   Rplanet = 0.422)
 
 HAT_P_2b = p(name = "HAT_P_2b", Teff = 6414, e=0.5171, Porb =5.63, a = 0.0674, wadv = 1.0/2, 
-                  tau_rad = 20, argp = 185.22, Rstar = 1.54, Mstar = 1.34, 
+                  tau_rad = 20, argp = 190, Rstar = 1.54, Mstar = 1.34, 
                   Rplanet = 0.951)
 
 
@@ -100,19 +101,34 @@ HAT_P_2b = p(name = "HAT_P_2b", Teff = 6414, e=0.5171, Porb =5.63, a = 0.0674, w
 # In[12]:
 
 
+#XO_3b = p(name = "XO-3b",Teff = 6781, e=0.26, Porb = 3.19, a = 0.0454, wadv = 1.0/2, 
+#                  tau_rad = 20, argp = 346, Rstar = 1.49, Mstar = 1.41, 
+#                  Rplanet = 1.217, pmax = 6, NSIDE = 8)
+
+#planets = [f(HD189733b), f(Wasp_17b), f(GI436b), f(XO_3b),f(HAT_P_11b), f(HAT_P_2b)]
+XO_3b = p(name = "XO-3b",Teff = 6781, e=0.26, Porb = 3.19, a = 0.0454, wadv = 1.0/2, 
+                  tau_rad = 20, argp = 346, Rstar = 1.49, Mstar = 1.41, 
+                  Rplanet = 1.217, steps = 100, NSIDE = 4, pmax =3)
+x0f = fit(XO_3b, ts = np.linspace(-160000,460000,num = 1000),
+          me = "XO-3b",Teff = 6781, e=0.26, Porb = 3.19, a = 0.0454, wadv = 1.0/2, 
+                  tau_rad = 20, argp = 346, Rstar = 1.49, Mstar = 1.41, 
+                  Rplanet = 1.217, steps = 100, NSIDE = 4, pmax =3)
+planets = [ x0f, XO_3b]
 
 
-planets = [HD189733b, Wasp_17b, GI436b, XO_3b,HAT_P_11b, HAT_P_2b]
 
+# In[12]:
 
+#planets = [HD189733b]
 #fig, ax = plt.subplots(2, 2, sharex='col', sharey='row', figsize = (16, 16))
-
+fig = plt.figure(figsize = (8,8))
 for planet in planets : 
 
                       
-    fig = plt.figure(figsize = (8,8))
-    taurads = [1,20]
+    #fig = plt.figure(figsize = (8,8))
+    taurads = [0,20]
     wadv = [0.5, 1.5, 2]
+    #wadv = [1.5, 2]
     
     #for planet in planets:
     Fstar, Fstarwv = planet.Fstar()
@@ -121,13 +137,27 @@ for planet in planets :
     
     planet.wadv = 1*(2*np.pi/planet.P)
     
-    t, d, Fwv = planet.Fobs(pmax=4, NSIDE=4)
-                
-    plt.plot(t/planet.Porb, Fwv/Fstarwv, 
-                         label = ("$\tau_{rad} = $"+str(planet.tau_rad/ 3600.0) +
+    t, d, Fwv = planet.Fobs()
+    '''    
+    alpha = planet.alpha
+    ang_vel = planet.ang_vel
+    f = planet.f
+    dphi = max(ang_vel) * (t[1]-t[0])*180/np.pi'''
+    #            
+    plt.plot(t/planet.Porb, Fwv/Fstarwv, linewidth = 2 ,
+                         label = ("$T_{rad} = $"+str(planet.tau_rad/ 3600.0) +
                          " hrs, $\omega_{rot} = $" + str(planet.wadv/((2*np.pi)/planet.P)) + "$\omega_{max}$") )
-    plt.legend()
-    plt.xlim(3, 4)
+    '''
+    tr = np.where(f <0.0002)[0]
+    ec = np.where(abs(f-1) < 0.0002)[0]
+    transit_t = np.array(t[tr])
+    eclipse_t = np.array(t[ec])
+    
+    plt.vlines(eclipse_t/planet.Porb, 0,(Fwv/Fstarwv)[ec], 
+                           linestyles = ':', 
+                           linewidth = 1 , color = 'k', alpha = 0.6, label = ' Eclipse')
+    '''
+    #plt.xlim(2, 3)
     #plt.ylim(0, 0.003)   
     for j in [20]:
             for k in wadv: 
@@ -137,16 +167,48 @@ for planet in planets :
                 planet.tau_rad = j * 3600.0
     
                 planet.wadv = k*(2*np.pi/planet.P)
-                t, d, Fwv = planet.Fobs(pmax=4, NSIDE=4)
+                print j
+                print k
+                t, d, Fwv = planet.Fobs()
+                
+                '''
+                plt.vlines(transit_t/planet.Porb, 0, (Fwv/Fstarwv)[tr], 
+                           linestyles = '--',
+                           linewidth = 1)'''
+                #/Fstarwv
                 
                 plt.plot(t/planet.Porb, Fwv/Fstarwv, 
-                         label = ("$\tau_{rad} = $"+str(planet.tau_rad/ 3600.0) +
-                         " hrs, $\omega_{rot} = $" + str(planet.wadv/((2*np.pi)/planet.P)) + "$\omega_{max}$") )
-                plt.legend()
-                plt.xlim(3, 4)
-                #plt.ylim(0, 0.003)
-    plt.title(str(planet.name)+": P = "+ str(planet.Porb/planet.days)+
+                         label = ("$T_{rad} = $"+str(planet.tau_rad/ 3600.0) +
+                         " hrs, $\omega_{rot} = $" + str(planet.wadv/((2*np.pi)/planet.P)) + "$\omega_{max}$"),
+                         linewidth = 2    )
+                         
+                
+                
+                
+                #plt.xlim(3, 4)
+                
+    plt.ylim(0, 0.003)
+    if planet.name == "HAT_P_2b":
+        plt.legend(fontsize = 8, loc = 1, ncol = 2) 
+
+    else :
+        plt.legend(fontsize = 8, loc = 2)
+        
+    plt.xticks([2.0, 2.25, 2.5, 2.75, 3], ['0', 'P/4', 'P/2','3P/4', 'P'])
+    #plt.set_xticklabels(['0', 'P/4', 'P/2','3P/4', 'P'], fontsize  = 14)
+    plt.xlabel('Time (P$_{orb}$)', fontsize = 12, fontweight = 'bold')
+    plt.ylabel('F$_{planet}$\F$_{star}$', fontsize = 12, fontweight = 'bold')
+    try:
+        plt.title(str(planet.me)+": P = "+ str(planet.Porb/planet.days)+
                         ", e = " + str(planet.e)+", w = " + str(planet.argp) +" degrees")
+    except AttributeError:
+        plt.title(str(planet.name)+": P = "+ str(planet.Porb/planet.days)+
+                        ", e = " + str(planet.e)+", w = " + str(planet.argp) +" degrees")
+        
     
-    fig.savefig(str(planet.name)+".pdf")
+    fig.savefig(str(planet.name)+"f.pdf")
+
+
+# In[12]:
+
             
