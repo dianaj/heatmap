@@ -4,9 +4,7 @@ Created on Mon Jul 25 19:01:50 2016
 
 @author: diana
 """
-
-#problem : this is not the damn phase angle where the flux is a maximum, it's
-#the phi max approximation 
+''' Code that makes the FINESSE figure for phi_max vs. temp_contrast'''
 
 
 import numpy as np
